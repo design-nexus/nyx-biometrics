@@ -161,25 +161,29 @@ fn live_test(surface: Surface, face: bool) -> Result<(), String> {
     match surface {
         Surface::Sudo => {
             let _ = Command::new(SUDO).arg("-k").status();
-            let ok = Command::new(SUDO).arg("/usr/bin/true").status().map(|s| s.success()).unwrap_or(false);
+            // Irlume's "use your face?" question arrives as sudo's ordinary password prompt,
+            // which reads as a request for the password; name both answers.
+            let ok = Command::new(SUDO)
+                .args(["-p", "Face: type yes and look at the camera. Or type your password: ", "/usr/bin/true"])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
             if ok { Ok(()) } else { Err("sudo didn't accept".into()) }
         }
-        _ => {
-            pamtest::authenticate(service(surface), &crate::user(), |p| match p {
-                Prompt::Secret(t) => pamtest::read_secret(&format!("{t} ")),
-                Prompt::Visible(t) => {
-                    print!("{t} ");
-                    let _ = std::io::stdout().flush();
-                    let mut l = String::new();
-                    std::io::stdin().lock().read_line(&mut l).ok()?;
-                    Some(l.trim_end().to_string())
-                }
-                Prompt::Info(t) => {
-                    println!("{t}");
-                    None
-                }
-            })
-        }
+        _ => pamtest::authenticate(service(surface), &crate::user(), |p| match p {
+            Prompt::Secret(t) => pamtest::read_secret(&format!("{t} ")),
+            Prompt::Visible(t) => {
+                print!("{t} ");
+                let _ = std::io::stdout().flush();
+                let mut l = String::new();
+                std::io::stdin().lock().read_line(&mut l).ok()?;
+                Some(l.trim_end().to_string())
+            }
+            Prompt::Info(t) => {
+                println!("{t}");
+                None
+            }
+        }),
     }
 }
 
@@ -215,11 +219,8 @@ pub fn apply(args: &[&str]) -> ExitCode {
         Err(e) => return fail(e),
     };
     println!("\nApplied (snapshot {id}). Now sign in once with the new setup.");
-    if matches!(surface, Surface::Sudo | Surface::Polkit) && !flags.face {
-        println!(
-            "To use your face: at the password prompt type  yes  (it stays hidden), press Enter and\n\
-             look at the camera. Typing your password instead skips the camera."
-        );
+    if surface == Surface::Polkit && !flags.face {
+        println!("To use your face: type  yes  in the password field and look at the camera.");
     }
     match live_test(surface, flags.face) {
         Ok(()) => {}

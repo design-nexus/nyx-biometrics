@@ -41,3 +41,6 @@ read -rp "Press Enter when it's open (or Ctrl+C to stop here)... "
 
 step "Applying to sudo"
 "$authctl" pam apply sudo
+
+step "Trying it"
+"$authctl" pam test sudo
