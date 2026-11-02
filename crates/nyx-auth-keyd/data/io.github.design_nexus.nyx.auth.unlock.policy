@@ -24,4 +24,14 @@
       <allow_active>auth_self</allow_active>
     </defaults>
   </action>
+
+  <action id="io.github.design_nexus.nyx.auth.app-action">
+    <description>Confirm a sensitive action in a Nyx app</description>
+    <message>Confirm it's you to allow this</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+  </action>
 </policyconfig>
