@@ -20,6 +20,12 @@ Run `nyx-authctl doctor` to see what Nyx Biometrics finds on your own computer.
 
 The IR stream exceeds Windows Hello's published IR minimum (340x340 at 15 fps).
 
+**Irlume mode.** Irlume's default dual mode also runs an anti-spoofing check on the colour
+camera, which needs room light. This machine runs Irlume in IR-only mode
+(`irlume auth sensor ir-only`, cameras pinned with `irlume set-cameras /dev/video0 /dev/video2`),
+like Windows Hello: the IR emitter lights the face and Irlume's IR anti-spoofing model still
+runs. Irlume labels IR-only experimental.
+
 **Not yet known:**
 - whether the IR emitter lights without help. Many UVC IR modules start dark. Irlume probes
   this during enrollment and offers `irlume ir-setup`; if that fails, `linux-enable-ir-emitter`
@@ -42,16 +48,17 @@ enough). Gaze is only needed to test the colour camera on its own.
 |---|---|
 | Irlume 0.15.0 installs from the AUR; `irlumed` runs | verified 2026-11-01 |
 | `irlume doctor`: TPM, camera nodes, IR and RGB stream minimums, every model and ONNX Runtime pass | verified 2026-11-01 |
-| `ir-calibration` passes after enrollment | pending |
-| IR emitter lights during capture | pending |
-| Enrollment in normal light | pending |
-| Match in a dark room | pending |
+| `ir-calibration` passes after enrollment | verified 2026-11-01 |
+| IR emitter lights during capture (2 of 3 frames lit, strobing) | verified 2026-11-02 |
+| Enrollment (10 scans) | verified 2026-11-01 |
+| Match in a dark room: refused in Irlume's default dual mode (its colour check needs light); works in IR-only mode | verified 2026-11-02 |
 | Printed photo refused | pending |
 | Phone-screen photo refused | pending |
 | `nyx-authctl doctor` reports face as one factor (IR with liveness) | pending |
 | Gaze on `/dev/video0` reports presence only | pending |
 | Lock screen face unlock, explicit wake only | pending (Phase 4) |
-| sudo face: local only, skipped over SSH | pending (Phase 3) |
+| sudo face in a local terminal, IR-only, dark room, about 2 s | verified 2026-11-02 |
+| sudo face skipped over SSH | pending |
 
 ## TEC ESS TE-FPA-CA1 fingerprint reader
 
