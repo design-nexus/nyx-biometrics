@@ -233,7 +233,7 @@ pub fn apply(args: &[&str]) -> ExitCode {
     };
     println!("\nApplied (snapshot {id}). Now sign in once with the new setup.");
     if surface == Surface::Polkit && !flags.face {
-        println!("To use your face: type  yes  in the password field and look at the camera.");
+        println!("Look at the camera when the administrator prompt appears (type yes first if it asks).");
     }
     match live_test(surface, flags.face) {
         Ok(()) => {}
