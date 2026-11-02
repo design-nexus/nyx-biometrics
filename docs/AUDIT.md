@@ -33,6 +33,11 @@ isn't installed). Ken runs `ken.lock`, a clone of `omarchy.lock` with visual cha
 **Polkit agent.** The `omarchy.polkit` Quickshell plugin (`Quickshell.Services.Polkit`).
 It reads `/etc/pam.d/polkit-1` to decide whether to show a fingerprint hint. Polkit's
 helper runs **one sequential PAM stack**, so concurrency isn't available there.
+- There is no `/etc/pam.d/polkit-1`; polkit 128 uses `/usr/lib/pam.d/polkit-1`.
+- `polkit-agent-helper-1` is socket-activated (`polkit-agent-helper@.service`) with
+  `PrivateDevices=yes` and `DevicePolicy=closed`. `pam_u2f` needs `/dev/hidraw*`, so
+  Omarchy's FIDO2 line in `polkit-1` most likely can't reach a key on this polkit
+  (untested: no key at hand). fprintd (D-Bus) and Irlume (a Unix socket) are unaffected.
 
 **Login.** SDDM. `/etc/pam.d/sddm` includes `system-login`, which includes `system-auth`
 (faillock, `pam_systemd_home`, `pam_unix`).

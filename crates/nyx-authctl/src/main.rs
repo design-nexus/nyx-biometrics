@@ -7,6 +7,7 @@ use nyx_auth_hw::SystemRunner;
 use nyx_auth_hw::report::{Paths, Report, Status};
 
 mod enroll;
+mod pam;
 
 const USAGE: &str = "Usage: nyx-authctl <command>
 
@@ -29,6 +30,15 @@ const USAGE: &str = "Usage: nyx-authctl <command>
 
   face enroll                     Enroll your face with the backend for this camera
   face manage                     Open the backend's own manager
+
+  pam preview SURFACE [--migrate-omarchy]
+                                  Show exactly what would change for login, lock-screen,
+                                  sudo or polkit, and run every check. Needs no root
+  pam apply SURFACE [--migrate-omarchy]
+                                  Apply it, test it with one sign-in, and keep it only if
+                                  that works; otherwise it's undone after 2 minutes
+  pam test SURFACE                Sign in once against a surface's current setup
+  pam restore [ID]                Put back the files from before a change (newest by default)
 
   helper status                   Whether the root helper is installed and current
   helper install                  Install the root helper and its polkit actions (run with sudo)
@@ -54,6 +64,11 @@ fn main() -> ExitCode {
         ["finger", "remove", finger] => enroll::finger_remove(&user(), finger),
         ["face", "enroll"] => enroll::face(&report(), false),
         ["face", "manage"] => enroll::face(&report(), true),
+        ["pam", "preview", rest @ ..] => pam::preview(rest),
+        ["pam", "apply", rest @ ..] => pam::apply(rest),
+        ["pam", "test", rest @ ..] => pam::test(rest),
+        ["pam", "restore"] => pam::restore(None),
+        ["pam", "restore", id] => pam::restore(Some(id)),
         ["helper", "status"] => enroll::helper_status(),
         ["helper", "install"] => enroll::helper_install(),
         ["help" | "--help" | "-h"] => {
@@ -68,7 +83,7 @@ fn main() -> ExitCode {
 }
 
 /// The calling user's name from the password database, not the environment.
-fn user() -> String {
+pub(crate) fn user() -> String {
     // SAFETY: getpwuid returns a pointer into static storage or null; it's read before any
     // other call that could overwrite it.
     unsafe {
@@ -132,7 +147,7 @@ fn heading(area: &str) -> &'static str {
     }
 }
 
-fn policy_path() -> PathBuf {
+pub(crate) fn policy_path() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))

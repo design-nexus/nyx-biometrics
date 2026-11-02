@@ -26,7 +26,8 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 | `nyx-authctl doctor` | done (review); verified on the G16 |
 | `nyx-auth-helper` with argv-matched polkit actions | done (review); not installed |
 | Enrollment and management: fingers, faces, named primary and backup keys | done (review), [ENROLLMENT.md](ENROLLMENT.md) |
-| **Gate**: install packages, IR emitter setup, real enrollment | planned |
+| **Gate**: install packages | done (Ken, 2026-11-01) |
+| **Gate**: IR emitter setup, real enrollment | pending (Ken) |
 | G16 IR camera with Irlume | pending hardware |
 | G16 RGB camera with Gaze | pending hardware |
 | TE-FPA-CA1 with libfprint | pending hardware |
@@ -36,10 +37,10 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 
 | Item | Status |
 |---|---|
-| `nyx-auth-pam`: generator, parser, managed blocks, remote and lid gate | planned |
-| Snapshots, atomic writes, 120-second auto-rollback | planned |
-| Migration of Omarchy's `pam_u2f` and `pam_fprintd` lines | planned |
-| Container suite (Docker, Arch, `pamtester`, mock modules) | planned |
+| `nyx-auth-pam`: generator, parser, managed blocks, remote and lid gate | done (review) |
+| Snapshots, atomic writes, 120-second auto-rollback | done (review) |
+| Migration of Omarchy's `pam_u2f` and `pam_fprintd` lines | done (review) |
+| Container suite (Docker, Arch, real PAM, mock modules): 22 cases | done (review) |
 | **Gate**: live sudo, polkit-1, SDDM and lock services, one at a time | planned |
 
 ## Phase 4: native interface
@@ -83,7 +84,7 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 |---|---|
 | Security review of every privileged component | planned |
 | Recovery drills from a TTY | planned |
-| `ENROLLMENT.md`, `RECOVERY.md`, `HARDWARE.md` | planned |
+| `ENROLLMENT.md`, `RECOVERY.md`, `HARDWARE.md` | first versions done |
 | Final summary: completed, blocked, deferred | planned |
 
 ## Not planned

@@ -73,8 +73,14 @@ where we can't.
 - *Threat*: `sudo` over SSH waits for a fingerprint or key touch at the laptop (or worse,
   succeeds because someone at the laptop touched it).
 - *Mitigations*: every non-password module is behind `nyx-auth-gate`, which skips them for
-  remote sessions and a closed lid. `Method::local_only` marks this in code; the generator
-  refuses to emit a non-password module without the gate.
+  remote sessions, sessions it can't identify and a closed lid. `Method::local_only` marks
+  this in code; the checker refuses a non-password module without the gate, and the helper
+  refuses to apply while the gate isn't installed. Irlume also stands down for remote
+  transactions on its own. Required methods (password plus key) have no gate: remote use
+  fails closed.
+- *Residual*: a `sudo` in a terminal multiplexer started locally and later attached over
+  SSH looks local. The socket-activated polkit helper has no session of its own, so for
+  administrator prompts only the user's display session is checked.
 
 ### Malicious local process
 

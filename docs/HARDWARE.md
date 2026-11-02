@@ -40,7 +40,9 @@ enough). Gaze is only needed to test the colour camera on its own.
 
 | Check | Status |
 |---|---|
-| Irlume installs and `irlume doctor` passes on Arch | pending |
+| Irlume 0.15.0 installs from the AUR; `irlumed` runs | verified 2026-11-01 |
+| `irlume doctor`: TPM, camera nodes, IR and RGB stream minimums, every model and ONNX Runtime pass | verified 2026-11-01 |
+| `ir-calibration` passes after enrollment | pending |
 | IR emitter lights during capture | pending |
 | Enrollment in normal light | pending |
 | Match in a dark room | pending |

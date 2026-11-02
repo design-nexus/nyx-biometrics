@@ -190,7 +190,8 @@ pub fn helper_status() -> ExitCode {
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .and_then(|v| v.trim().parse::<u32>().ok());
-    let policy_ok = std::fs::read_to_string(POLICY_FILE).map(|p| p == POLICY).unwrap_or(false);
+    let policy_ok = std::fs::read_to_string(POLICY_FILE).map(|p| p == POLICY).unwrap_or(false)
+        && Path::new(nyx_auth_pam::generate::GATE).is_file();
     match (installed, policy_ok) {
         (Some(v), true) if v == HELPER_VERSION => {
             println!("Installed and current (version {v}).");
@@ -201,27 +202,34 @@ pub fn helper_status() -> ExitCode {
     }
 }
 
-/// Copy the helper that sits next to this binary into its root-owned location and install
-/// its polkit actions. Must be run as root, deliberately.
+/// Copy the helper and the gate that sit next to this binary into their root-owned
+/// locations and install the polkit actions. Must be run as root, deliberately.
 pub fn helper_install() -> ExitCode {
     // SAFETY: geteuid has no preconditions.
     if unsafe { libc::geteuid() } != 0 {
         return fail("Run this with sudo.");
     }
-    let Some(source) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("nyx-auth-helper"))) else {
-        return fail("Can't find nyx-auth-helper next to nyx-authctl.");
+    let Some(here) = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)) else {
+        return fail("Can't find the directory nyx-authctl runs from.");
     };
-    if !source.is_file() {
-        return fail(format!("{} doesn't exist. Build it first.", source.display()));
+    for name in ["nyx-auth-helper", "nyx-auth-gate"] {
+        if !here.join(name).is_file() {
+            return fail(format!("{} doesn't exist. Build it first.", here.join(name).display()));
+        }
     }
-    let result = (|| -> std::io::Result<()> {
-        let dir = Path::new(INSTALL_PATH).parent().expect("absolute path");
+    let install = |source: &Path, target: &str| -> std::io::Result<()> {
+        let target = Path::new(target);
+        let dir = target.parent().expect("absolute path");
         std::fs::create_dir_all(dir)?;
         std::fs::set_permissions(dir, std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
-        let tmp = dir.join(".nyx-auth-helper.new");
-        std::fs::copy(&source, &tmp)?;
+        let tmp = dir.join(".nyx-install.new");
+        std::fs::copy(source, &tmp)?;
         std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
-        std::fs::rename(&tmp, INSTALL_PATH)?;
+        std::fs::rename(&tmp, target)
+    };
+    let result = (|| -> std::io::Result<()> {
+        install(&here.join("nyx-auth-helper"), INSTALL_PATH)?;
+        install(&here.join("nyx-auth-gate"), nyx_auth_pam::generate::GATE)?;
         let ptmp = Path::new(POLICY_FILE).with_extension("policy.new");
         std::fs::write(&ptmp, POLICY)?;
         std::fs::set_permissions(&ptmp, std::os::unix::fs::PermissionsExt::from_mode(0o644))?;
@@ -229,7 +237,7 @@ pub fn helper_install() -> ExitCode {
     })();
     match result {
         Ok(()) => {
-            println!("Installed {INSTALL_PATH} and {POLICY_FILE}.");
+            println!("Installed {INSTALL_PATH}, {} and {POLICY_FILE}.", nyx_auth_pam::generate::GATE);
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),

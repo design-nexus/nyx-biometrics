@@ -11,5 +11,6 @@ repository.workspace = true
 nyx-auth-core = { path = "../nyx-auth-core" }
 nyx-auth-hw = { path = "../nyx-auth-hw" }
 nyx-auth-helper = { path = "../nyx-auth-helper" }
+nyx-auth-pam = { path = "../nyx-auth-pam" }
 serde_json = "1"
 libc = "0.2"

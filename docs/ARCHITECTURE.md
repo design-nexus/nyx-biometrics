@@ -128,36 +128,78 @@ auth  include  nyx-auth-sudo
 # END nyx-biometrics
 ```
 
-`/etc/pam.d/nyx-auth-sudo` holds the generated stack. For a sequential surface it is, in
-the policy's order:
+`/etc/pam.d/nyx-auth-sudo` holds the generated stack. For a sequential surface, each
+method is preceded by a gate, in the policy's order (or face, fingerprint, key):
 
 ```text
-auth  [success=ignore default=N]  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-gate
-auth  sufficient  <face module>        # short timeout
-auth  sufficient  pam_fprintd.so       max-tries=2 timeout=10
-auth  sufficient  pam_u2f.so           cue authfile=… [pinverification=1]
+auth  [success=1 default=ignore]  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-gate built-in
+auth  sufficient  pam_irlume.so
+auth  [success=1 default=ignore]  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-gate built-in
+auth  sufficient  pam_fprintd.so max-tries=2 timeout=30
+auth  [success=1 default=ignore]  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-gate local
+auth  sufficient  pam_u2f.so cue authfile=/etc/nyx-biometrics/u2f_keys [pinverification=1]
 ```
 
-followed by the file's existing password lines, untouched. The gate skips every non-password
-module (N lines) when the session is remote (`PAM_RHOST` set, `SSH_CONNECTION` in the
-calling process, or no active local logind seat) or the lid is closed. Omarchy's
-clamshell check is folded into it.
+followed by the file's existing password lines, untouched.
 
-`require-all = ["password", "security-key"]` compiles to `pam_unix` and `pam_u2f` both
-`required`, with the password tried first.
+**The gate exits 0 to skip** the next line. In Linux-PAM a numeric jump behaves like `ok`,
+so a gate that skipped by *failing* would record a failure that sinks a correct password.
+Exiting 0 records success, which the password stack's own `required` lines still override.
+This is the pattern Omarchy uses for its lid check. The gate skips when:
 
-Applying a change:
+- `PAM_RHOST` names another host;
+- the program running PAM descends from `sshd`, `sshd-session`, `mosh-server` or similar;
+- logind says that program's session is remote, or it has no session (cron, services);
+- the user's display session isn't local, on a seat and active;
+- for `built-in` (face, fingerprint): the lid is closed.
 
-1. Generate the stack and a diff against `/etc/pam.d`.
-2. Run the container suite on the generated files (below). Refuse if any case fails.
-3. Snapshot every file it will touch to `/var/lib/nyx-biometrics/pam-backups/<time>/`.
-4. Write files atomically (temp file in the same directory, fsync, rename).
-5. Start a 120-second transient timer that restores the snapshot unless the person
-   confirms, from a new `sudo` or a new terminal, that they can still authenticate.
+Anything it can't establish counts as a reason to skip. If the gate itself is missing, PAM
+treats it as `ignore` and the method runs; `nyx-auth-helper` refuses to apply a stack while
+the gate isn't installed.
 
-`nyx-authctl pam restore` (and `nyx-auth-helper restore` from a root shell or TTY) puts back
-the newest snapshot. Omarchy's own `pam_u2f` and `pam_fprintd` lines are detected and moved
-into the managed block only with consent, so the two never run twice.
+The polkit helper is socket-activated by systemd (`polkit-agent-helper@.service`), so it
+has no session or useful ancestry; for `polkit-1` the user's display session decides. That
+unit also runs with `PrivateDevices=yes`, which hides security keys from `pam_u2f`. When a
+key is allowed at administrator prompts, Nyx adds a drop-in
+(`50-nyx-security-keys.conf`: `PrivateDevices=no`, `DevicePolicy=closed`,
+`DeviceAllow=char-hidraw rw`) so the helper reaches hidraw devices and nothing else new.
+
+`require-all = ["password", "security-key"]` compiles to a second block after the
+password, `auth include nyx-auth-sudo-required`, holding `pam_u2f` as `required` without
+a gate: over SSH it can't be satisfied, so remote sudo fails closed.
+
+Applying a change (`nyx-authctl pam apply SURFACE`):
+
+1. `nyx-authctl` generates the stack as the user, runs every check, and shows the diff and
+   a change ID. Nothing needs root yet (`pam preview` stops here).
+2. After you type `yes`, the helper is given the **policy**, not PAM text. It probes the
+   hardware itself, regenerates, re-runs the checks, and refuses unless the result has the
+   change ID you saw.
+3. It snapshots every file it will touch to `/var/lib/nyx-biometrics/pam-backups/<ID>/`,
+   writes generated stacks before the target's include line (temp file, fsync, rename),
+   and only writes paths on a fixed list. It never deletes a file Nyx didn't write.
+4. It arms a 120-second `systemd-run` timer that restores the snapshot. If the timer
+   can't be armed, it restores immediately.
+5. `nyx-authctl` signs you in once against the changed service (a real `sudo`, or a PAM
+   conversation with `polkit-1`, `sddm` or the lock service). Only if that works does it
+   confirm, through an administrator prompt, which stops the timer.
+
+`nyx-authctl pam restore [ID]` puts a snapshot back; from a root shell,
+`nyx-auth-helper pam-rollback ID` does the same. See [RECOVERY.md](RECOVERY.md). Omarchy's
+own `pam_u2f`, `pam_fprintd` and lid-gate lines are only removed with `--migrate-omarchy`;
+otherwise their presence stops the apply, so no method runs twice.
+
+### Checks before anything is written
+
+`nyx_auth_pam::check::verify` re-reads the generated files rather than trusting the
+generator. It refuses:
+
+- a module outside `pam_irlume`, `pam_gaze`, `pam_fprintd`, `pam_u2f` in Nyx's files;
+- a method line without a gate in front of it, or a gate not followed by exactly one method;
+- `pam_permit` that could end the stack anywhere in the expanded target;
+- a target whose expanded `auth` stack no longer reaches `pam_unix`;
+- a pre block after the password, or a required block before it;
+- anything but one required method in a `nyx-lock-*` service.
 
 ### Lock screen
 
@@ -243,8 +285,12 @@ it can move into a shared Nyx System Manager when one exists.
 - Unit tests for the policy engine, assurance, PAM generation and parsing, the rollback
   state machine, broker request checks, and adapters against mocks (disconnects, timeouts,
   wrong finger, unknown face, wrong PIN, key removed, several keys).
-- PAM stacks run in a Docker container (Arch, `pamtester`, mock `pam_exec` modules for
-  face, fingerprint and key). Nothing touches the host's `/etc/pam.d`.
+- PAM stacks run in a Docker container (`crates/nyx-auth-pam/tests/container.rs`): Arch's
+  stock `system-auth`, a test user, a real PAM conversation (`pam-try`), and `pam_exec`
+  mocks for face, fingerprint, key and the gate that record every call. 22 cases cover each
+  method passing, failing and timing out, remote and lid-closed skips, password plus key,
+  the lock services, and restore. A deliberately broken gate makes it fail. Nothing
+  touches the host's `/etc/pam.d`.
 - QML plugins are checked on a headless, off-screen Hyprland output.
 - Real hardware has a manual checklist in `HARDWARE.md`; each line stays "pending" until it
   has been run on the device.
