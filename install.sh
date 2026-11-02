@@ -4,11 +4,11 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-cargo build --release --locked --quiet -p nyx-authctl -p nyx-auth-helper -p nyx-auth-pam
+cargo build --release --locked --quiet -p nyx-authctl -p nyx-auth-helper -p nyx-auth-pam -p nyx-auth-keyd
 
 bin="$HOME/.local/bin"
 mkdir -p "$bin"
-for name in nyx-authctl nyx-auth-helper nyx-auth-gate; do
+for name in nyx-authctl nyx-auth-helper nyx-auth-gate nyx-auth-keyd; do
   install -m 755 "target/release/$name" "$bin/$name"
 done
 echo "Installed nyx-authctl to $bin."
