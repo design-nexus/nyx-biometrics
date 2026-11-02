@@ -62,6 +62,7 @@ enough). Gaze is only needed to test the colour camera on its own.
 | sudo face hands-free (no `yes`), about 1.5 s | verified 2026-11-02 |
 | sudo face skipped over SSH | pending |
 | Administrator prompts (polkit) approved by face, hands-free | verified 2026-11-02 |
+| Same through the Nyx administrator prompt (`design-nexus.auth-polkit`), with the scan overlay | verified 2026-11-02 |
 
 ## TEC ESS TE-FPA-CA1 fingerprint reader
 

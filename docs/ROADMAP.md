@@ -51,9 +51,10 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 | Item | Status |
 |---|---|
 | Design 2.0 tokens export for QML (nyx-design) | planned |
-| QML `NyxAuth`: four styles, every method and state | planned |
+| `AuthOverlay.qml`: four styles, every method and state, with a preview | done |
 | `design-nexus.auth-lock` from `ken.lock` (face on wake) | done, in use on the G16 |
-| `design-nexus.auth-polkit`, `design-nexus.auth-prompt` (with preview mode) | planned |
+| `design-nexus.auth-polkit` with the scan overlay | done, in use on the G16 |
+| `design-nexus.auth-prompt` for app requests and sudo status | planned |
 | SDDM theme | planned |
 | `nyx-authd` broker | planned |
 | Nyx Settings: Sign-in & Security page, Users-page link | done (review: nyx-settings#1), installed |
@@ -78,7 +79,7 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 |---|---|
 | SSH agent for Bitwarden SSH key items, per-use approval | planned |
 | OpenSSH `sk` keys: guidance and detection | planned |
-| Assistant: broker authentication for `Privileged` and `Secrets` approvals | planned |
+| Assistant: `Secrets` approvals also need the person to sign in (polkit `app-action`) | done (review: nyx-assistant#1); `Privileged` already needs `auth_admin` |
 | Glimpse: protected items through the broker | planned |
 
 ## Phase 7: hardening
