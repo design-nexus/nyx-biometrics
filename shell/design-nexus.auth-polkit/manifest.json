@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "design-nexus.auth-polkit",
+  "name": "Nyx Administrator Prompt",
+  "version": "0.1.0",
+  "author": "Design Nexus",
+  "description": "Omarchy's polkit dialog with the Nyx Biometrics scan overlay while a face is checked.",
+  "omarchy": {
+    "capabilities": [
+      "authentication"
+    ],
+    "clonedFrom": "omarchy.polkit"
+  },
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "PolkitAgent.qml"
+  }
+}

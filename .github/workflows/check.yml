@@ -15,7 +15,9 @@ jobs:
           pacman -Syyuu --noconfirm --needed git rust gcc pkgconf
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - name: Plugins carry the shared overlay
-        run: cmp shell/common/AuthOverlay.qml shell/design-nexus.auth-lock/AuthOverlay.qml
+        run: |
+          cmp shell/common/AuthOverlay.qml shell/design-nexus.auth-lock/AuthOverlay.qml
+          cmp shell/common/AuthOverlay.qml shell/design-nexus.auth-polkit/AuthOverlay.qml
       - run: cargo check --locked --workspace --all-features
       - run: cargo clippy --locked --workspace --all-features --all-targets -- -D warnings
       - run: cargo test --locked --workspace --all-features
