@@ -19,16 +19,27 @@ fn fail(msg: impl std::fmt::Display) -> ExitCode {
     ExitCode::FAILURE
 }
 
-fn parse(args: &[&str]) -> Result<(Surface, bool), ExitCode> {
+#[derive(Default)]
+struct Flags {
+    migrate: bool,
+    /// Approved elsewhere (for example in a chat with an agent): don't ask again.
+    yes: bool,
+    /// Test with the face alone: answer "yes" to the face prompt and never send a password.
+    face: bool,
+}
+
+fn parse(args: &[&str]) -> Result<(Surface, Flags), ExitCode> {
     let mut surface = None;
-    let mut migrate = false;
+    let mut flags = Flags::default();
     for a in args {
         match *a {
-            "--migrate-omarchy" => migrate = true,
+            "--migrate-omarchy" => flags.migrate = true,
+            "--yes" => flags.yes = true,
+            "--face" => flags.face = true,
             s => surface = pam::surface_key(s),
         }
     }
-    surface.map(|s| (s, migrate)).ok_or_else(|| fail("Name a surface: login, lock-screen, sudo or polkit."))
+    surface.map(|s| (s, flags)).ok_or_else(|| fail("Name a surface: login, lock-screen, sudo or polkit."))
 }
 
 fn policy_text() -> Result<String, ExitCode> {
@@ -79,8 +90,8 @@ fn show(p: &Prepared) {
 }
 
 pub fn preview(args: &[&str]) -> ExitCode {
-    let Ok((surface, migrate)) = parse(args) else { return ExitCode::from(2) };
-    match prepare(surface, migrate) {
+    let Ok((surface, flags)) = parse(args) else { return ExitCode::from(2) };
+    match prepare(surface, flags.migrate) {
         Ok(p) => {
             show(&p);
             ExitCode::SUCCESS
@@ -115,8 +126,38 @@ fn helper_capture(args: &[&str], stdin: Option<&str>) -> Result<String, String> 
     }
 }
 
+fn service(surface: Surface) -> &'static str {
+    match surface {
+        Surface::Sudo => "sudo",
+        Surface::Polkit => "polkit-1",
+        Surface::Login => "sddm",
+        _ => "nyx-lock-password",
+    }
+}
+
+/// One PAM conversation that only accepts the face: the first prompt (Irlume's "use your
+/// face?") is answered "yes"; any later prompt means the face didn't do it.
+fn face_test(surface: Surface) -> Result<(), String> {
+    let mut asked = false;
+    println!("Look at the camera.");
+    pamtest::authenticate(service(surface), &crate::user(), |p| match p {
+        Prompt::Secret(_) | Prompt::Visible(_) if !asked => {
+            asked = true;
+            Some("yes".into())
+        }
+        Prompt::Secret(_) | Prompt::Visible(_) => None,
+        Prompt::Info(t) => {
+            println!("{t}");
+            None
+        }
+    })
+}
+
 /// Authenticate against the changed service, as it will be used.
-fn live_test(surface: Surface) -> Result<(), String> {
+fn live_test(surface: Surface, face: bool) -> Result<(), String> {
+    if face {
+        return face_test(surface);
+    }
     match surface {
         Surface::Sudo => {
             let _ = Command::new(SUDO).arg("-k").status();
@@ -124,12 +165,7 @@ fn live_test(surface: Surface) -> Result<(), String> {
             if ok { Ok(()) } else { Err("sudo didn't accept".into()) }
         }
         _ => {
-            let service = match surface {
-                Surface::Polkit => "polkit-1",
-                Surface::Login => "sddm",
-                _ => "nyx-lock-password",
-            };
-            pamtest::authenticate(service, &crate::user(), |p| match p {
+            pamtest::authenticate(service(surface), &crate::user(), |p| match p {
                 Prompt::Secret(t) => pamtest::read_secret(&format!("{t} ")),
                 Prompt::Visible(t) => {
                     print!("{t} ");
@@ -148,7 +184,8 @@ fn live_test(surface: Surface) -> Result<(), String> {
 }
 
 pub fn apply(args: &[&str]) -> ExitCode {
-    let Ok((surface, migrate)) = parse(args) else { return ExitCode::from(2) };
+    let Ok((surface, flags)) = parse(args) else { return ExitCode::from(2) };
+    let migrate = flags.migrate;
     let p = match prepare(surface, migrate) {
         Ok(p) => p,
         Err(code) => return code,
@@ -162,7 +199,7 @@ pub fn apply(args: &[&str]) -> ExitCode {
          After applying you'll be asked to sign in once to prove it works. If you don't, or it\n\
          fails, the change is undone automatically after {ROLLBACK_SECS} seconds."
     );
-    if !ask("\nType yes to apply:") {
+    if !flags.yes && !ask("\nType yes to apply:") {
         return fail("Nothing changed.");
     }
     let mut helper_args = vec!["pam-apply", surface.key(), p.fingerprint.as_str()];
@@ -177,8 +214,14 @@ pub fn apply(args: &[&str]) -> ExitCode {
         Ok(id) => id,
         Err(e) => return fail(e),
     };
-    println!("\nApplied (snapshot {id}). Now sign in once with the new setup:");
-    match live_test(surface) {
+    println!("\nApplied (snapshot {id}). Now sign in once with the new setup.");
+    if matches!(surface, Surface::Sudo | Surface::Polkit) && !flags.face {
+        println!(
+            "To use your face: at the password prompt type  yes  (it stays hidden), press Enter and\n\
+             look at the camera. Typing your password instead skips the camera."
+        );
+    }
+    match live_test(surface, flags.face) {
         Ok(()) => {}
         Err(e) => {
             return fail(format!(
@@ -198,8 +241,8 @@ pub fn apply(args: &[&str]) -> ExitCode {
 }
 
 pub fn test(args: &[&str]) -> ExitCode {
-    let Ok((surface, _)) = parse(args) else { return ExitCode::from(2) };
-    match live_test(surface) {
+    let Ok((surface, flags)) = parse(args) else { return ExitCode::from(2) };
+    match live_test(surface, flags.face) {
         Ok(()) => {
             println!("Accepted.");
             ExitCode::SUCCESS

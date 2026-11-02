@@ -34,10 +34,11 @@ const USAGE: &str = "Usage: nyx-authctl <command>
   pam preview SURFACE [--migrate-omarchy]
                                   Show exactly what would change for login, lock-screen,
                                   sudo or polkit, and run every check. Needs no root
-  pam apply SURFACE [--migrate-omarchy]
+  pam apply SURFACE [--migrate-omarchy] [--yes] [--face]
                                   Apply it, test it with one sign-in, and keep it only if
-                                  that works; otherwise it's undone after 2 minutes
-  pam test SURFACE                Sign in once against a surface's current setup
+                                  that works; otherwise it's undone after 2 minutes.
+                                  --face tests with your face alone, never the password
+  pam test SURFACE [--face]       Sign in once against a surface's current setup
   pam restore [ID]                Put back the files from before a change (newest by default)
 
   helper status                   Whether the root helper is installed and current
