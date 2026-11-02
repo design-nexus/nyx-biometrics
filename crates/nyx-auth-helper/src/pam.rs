@@ -159,10 +159,10 @@ pub struct Manifest {
 
 /// Snapshot, then write. Returns the snapshot ID; the caller arms the rollback timer.
 pub fn apply(root: &Root, changes: &[FileChange], surface: Surface, id: &str) -> Result<Manifest, PamError> {
-    if changes.iter().any(|c| c.contents.as_deref().is_some_and(|t| t.contains("nyx-auth-gate"))) {
-        let gate = root.at(nyx_auth_pam::generate::GATE);
-        if !gate.is_file() {
-            return Err(PamError::Missing(nyx_auth_pam::generate::GATE.into()));
+    for tool in [nyx_auth_pam::generate::GATE, nyx_auth_pam::generate::NOTIFY] {
+        let name = tool.rsplit('/').next().unwrap_or(tool);
+        if changes.iter().any(|c| c.contents.as_deref().is_some_and(|t| t.contains(name))) && !root.at(tool).is_file() {
+            return Err(PamError::Missing(tool.into()));
         }
     }
     let dir = root.backups().join(id);
@@ -294,6 +294,7 @@ mod tests {
         fs::write(root.at("/etc/pam.d/sudo"), SUDO).unwrap();
         fs::write(root.at("/etc/pam.d/system-auth"), SYSTEM_AUTH).unwrap();
         fs::write(root.at(nyx_auth_pam::generate::GATE), "").unwrap();
+        fs::write(root.at(nyx_auth_pam::generate::NOTIFY), "").unwrap();
         (dir, root)
     }
 
@@ -316,7 +317,8 @@ mod tests {
         let m = Modules::system(Some(Backend::Irlume));
         let changes = prepare(&root, &recommended(), Surface::Sudo, &inv(), &m).unwrap();
         let eff = effective(&root, &changes);
-        assert_eq!(eff.len(), 2, "{eff:?}");
+        // sudo, its stack, and the session cue for the shell.
+        assert_eq!(eff.len(), 3, "{eff:?}");
         let manifest = apply(&root, &eff, Surface::Sudo, "20261101-1").unwrap();
         assert!(fs::read_to_string(root.at("/etc/pam.d/sudo")).unwrap().contains("nyx-auth-sudo"));
         assert!(root.at("/etc/pam.d/nyx-auth-sudo").exists());
@@ -325,6 +327,7 @@ mod tests {
         restore(&root, &manifest.id).unwrap();
         assert_eq!(fs::read_to_string(root.at("/etc/pam.d/sudo")).unwrap(), SUDO);
         assert!(!root.at("/etc/pam.d/nyx-auth-sudo").exists());
+        assert!(!root.at("/etc/pam.d/nyx-auth-sudo-session").exists());
         assert!(matches!(latest(&root), Err(PamError::NoSnapshot)));
     }
 

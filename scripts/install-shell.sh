@@ -13,7 +13,7 @@ plugins="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
 stage="$(dirname "$plugins")/.nyx-plugin-stage"
 mkdir -p "$plugins"
 
-for plugin in design-nexus.auth-lock design-nexus.auth-polkit; do
+for plugin in design-nexus.auth-lock design-nexus.auth-polkit design-nexus.auth-prompt; do
   cp common/AuthOverlay.qml "$plugin/AuthOverlay.qml"
   rm -rf "$stage"
   cp -r "$plugin" "$stage"

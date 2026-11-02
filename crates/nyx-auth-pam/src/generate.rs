@@ -7,6 +7,7 @@ use thiserror::Error;
 use crate::block;
 
 pub const GATE: &str = "/usr/lib/nyx-biometrics/nyx-auth-gate";
+pub const NOTIFY: &str = "/usr/lib/nyx-biometrics/nyx-auth-notify";
 pub const AUTHFILE: &str = "/etc/nyx-biometrics/u2f_keys";
 /// Lets the socket-activated polkit helper open security keys, and nothing else new.
 pub const POLKIT_DROPIN: &str = "/etc/systemd/system/polkit-agent-helper@.service.d/50-nyx-security-keys.conf";
@@ -23,6 +24,9 @@ DeviceAllow=char-hidraw rw
 pub struct Modules {
     pub face: Option<Backend>,
     pub gate: String,
+    /// Tells the shell a terminal sign-in is scanning, so it can show the overlay. Used
+    /// for sudo only: polkit and the lock screen draw their own.
+    pub notify: Option<String>,
     pub authfile: String,
     /// For container tests: every method becomes `pam_exec.so quiet <dir>/<method>`.
     pub mock_dir: Option<String>,
@@ -33,13 +37,21 @@ pub struct Modules {
 
 impl Modules {
     pub fn system(face: Option<Backend>) -> Self {
-        Self { face, gate: GATE.into(), authfile: AUTHFILE.into(), mock_dir: None, migrate_omarchy: false }
+        Self {
+            face,
+            gate: GATE.into(),
+            notify: Some(NOTIFY.into()),
+            authfile: AUTHFILE.into(),
+            mock_dir: None,
+            migrate_omarchy: false,
+        }
     }
 
     pub fn mock(dir: &str) -> Self {
         Self {
             face: Some(Backend::Irlume),
             gate: format!("{dir}/gate"),
+            notify: Some(format!("{dir}/notify")),
             authfile: AUTHFILE.into(),
             mock_dir: Some(dir.into()),
             migrate_omarchy: false,
@@ -75,6 +87,14 @@ impl Modules {
                 format!("pam_u2f.so cue authfile={}{pin}", self.authfile)
             }
         }))
+    }
+
+    fn notify_kind(method: Method) -> &'static str {
+        match method {
+            Method::Face { .. } => "face",
+            Method::Fingerprint => "fingerprint",
+            _ => "key",
+        }
     }
 
     fn gate_kind(method: Method) -> &'static str {
@@ -181,21 +201,32 @@ fn sequential(plan: &Plan, modules: &Modules, files: &dyn Files, target: &'stati
 
     let pre_name = format!("nyx-auth-{target}");
     let post_name = format!("nyx-auth-{target}-required");
+    let session_name = format!("nyx-auth-{target}-session");
     let mut out = Vec::new();
 
     let pre = if singles.is_empty() {
         None
     } else {
         let mut text = header(&format!("{}, methods tried before the password", plan.surface.label()));
+        let notify = modules.notify.as_deref().filter(|_| plan.surface == Surface::Sudo);
         for m in &singles {
             let line = modules.line(*m, plan.timeout_secs, plan.surface)?.expect("not the password");
-            // The gate exits 0 to skip the next line: a remote session, or a closed lid.
+            // The gate exits 0 to skip its group: a remote session, or a closed lid. In a
+            // terminal the group also tells the shell when a scan starts and when it didn't
+            // succeed; those lines are optional and can't change the result.
+            let group = if notify.is_some() { 3 } else { 1 };
             text.push_str(&format!(
-                "auth  [success=1 default=ignore]  pam_exec.so quiet {} {}\n",
+                "auth  [success={group} default=ignore]  pam_exec.so quiet {} {}\n",
                 modules.gate,
                 Modules::gate_kind(*m)
             ));
+            if let Some(n) = notify {
+                text.push_str(&format!("auth  optional  pam_exec.so quiet {n} start {}\n", Modules::notify_kind(*m)));
+            }
             text.push_str(&format!("auth  sufficient  {line}\n"));
+            if let Some(n) = notify {
+                text.push_str(&format!("auth  optional  pam_exec.so quiet {n} failed {}\n", Modules::notify_kind(*m)));
+            }
         }
         Some(text)
     };
@@ -218,12 +249,26 @@ fn sequential(plan: &Plan, modules: &Modules, files: &dyn Files, target: &'stati
     let mut lines = block::strip(&base, &etc_path(target))?;
     lines = block::omarchy(lines, &etc_path(target), modules.migrate_omarchy)?;
     let lines = block::insert(lines, pre.as_ref().map(|_| pre_name.as_str()), post.as_ref().map(|_| post_name.as_str()), target)?;
+    // After a terminal sign-in succeeds, its session opens: the shell's cue that a scan
+    // it showed is done.
+    let session = match (&pre, modules.notify.as_deref()) {
+        (Some(_), Some(n)) if plan.surface == Surface::Sudo => Some(format!(
+            "{}session  optional  pam_exec.so quiet {n} done any\n",
+            header("Terminal (sudo), tells the shell a sign-in finished")
+        )),
+        _ => None,
+    };
+    let lines = match &session {
+        Some(_) => block::insert_session(lines, &session_name, target)?,
+        None => lines,
+    };
     let new_target = crate::parse::render(&lines);
 
     let untouched = pre.is_none() && post.is_none() && block::is_created(&new_target);
     out.push(FileChange { path: etc_path(target), contents: if untouched { None } else { Some(new_target) } });
     out.push(FileChange { path: etc_path(&pre_name), contents: pre });
     out.push(FileChange { path: etc_path(&post_name), contents: post });
+    out.push(FileChange { path: etc_path(&session_name), contents: session });
 
     if plan.surface == Surface::Polkit {
         let uses_keys = singles.iter().chain(&required).any(|m| m.kind() == MethodKind::SecurityKey);
@@ -311,15 +356,23 @@ pub(crate) mod tests {
         let c = generate(&plan(Surface::Sudo, &set.sudo), &Modules::system(Some(Backend::Irlume)), &files()).unwrap();
         let pre = get(&c, "/etc/pam.d/nyx-auth-sudo").unwrap();
         let rules: Vec<&str> = pre.lines().filter(|l| l.starts_with("auth")).collect();
+        let gate = "auth  [success=3 default=ignore]  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-gate";
+        let notify = "auth  optional  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-notify";
         assert_eq!(
             rules,
             vec![
-                "auth  [success=1 default=ignore]  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-gate built-in",
-                "auth  sufficient  pam_irlume.so",
-                "auth  [success=1 default=ignore]  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-gate built-in",
-                "auth  sufficient  pam_fprintd.so max-tries=2 timeout=30",
-                "auth  [success=1 default=ignore]  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-gate local",
-                "auth  sufficient  pam_u2f.so cue authfile=/etc/nyx-biometrics/u2f_keys",
+                format!("{gate} built-in"),
+                format!("{notify} start face"),
+                "auth  sufficient  pam_irlume.so".to_string(),
+                format!("{notify} failed face"),
+                format!("{gate} built-in"),
+                format!("{notify} start fingerprint"),
+                "auth  sufficient  pam_fprintd.so max-tries=2 timeout=30".to_string(),
+                format!("{notify} failed fingerprint"),
+                format!("{gate} local"),
+                format!("{notify} start key"),
+                "auth  sufficient  pam_u2f.so cue authfile=/etc/nyx-biometrics/u2f_keys".to_string(),
+                format!("{notify} failed key"),
             ]
         );
         let target = get(&c, "/etc/pam.d/sudo").unwrap();
@@ -329,7 +382,21 @@ pub(crate) mod tests {
             ),
             "{target}"
         );
+        assert!(
+            target.contains("# BEGIN nyx-biometrics\nsession  include  nyx-auth-sudo-session\n# END nyx-biometrics\nsession"),
+            "{target}"
+        );
+        assert!(
+            get(&c, "/etc/pam.d/nyx-auth-sudo-session")
+                .unwrap()
+                .contains("session  optional  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-notify done any\n")
+        );
         assert!(get(&c, "/etc/pam.d/nyx-auth-sudo-required").is_none());
+
+        // Only sudo tells the shell; polkit and the lock screen draw their own.
+        let p = generate(&plan(Surface::Polkit, &set.polkit), &Modules::system(Some(Backend::Irlume)), &files()).unwrap();
+        let polkit = get(&p, "/etc/pam.d/nyx-auth-polkit-1").unwrap();
+        assert!(!polkit.contains("nyx-auth-notify") && polkit.contains("[success=1 default=ignore]"));
     }
 
     #[test]
@@ -443,6 +510,6 @@ pub(crate) mod tests {
         let set = PolicySet::recommended(&inventory());
         let c = generate(&plan(Surface::Sudo, &set.sudo), &Modules::mock("/mock"), &files()).unwrap();
         let pre = get(&c, "/etc/pam.d/nyx-auth-sudo").unwrap();
-        assert!(pre.contains("auth  [success=1 default=ignore]  pam_exec.so quiet /mock/gate built-in\nauth  sufficient  pam_exec.so quiet /mock/face\n"));
+        assert!(pre.contains("auth  [success=3 default=ignore]  pam_exec.so quiet /mock/gate built-in\nauth  optional  pam_exec.so quiet /mock/notify start face\nauth  sufficient  pam_exec.so quiet /mock/face\nauth  optional  pam_exec.so quiet /mock/notify failed face\n"));
     }
 }

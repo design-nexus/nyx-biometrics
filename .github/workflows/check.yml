@@ -18,6 +18,7 @@ jobs:
         run: |
           cmp shell/common/AuthOverlay.qml shell/design-nexus.auth-lock/AuthOverlay.qml
           cmp shell/common/AuthOverlay.qml shell/design-nexus.auth-polkit/AuthOverlay.qml
+          cmp shell/common/AuthOverlay.qml shell/design-nexus.auth-prompt/AuthOverlay.qml
       - run: cargo check --locked --workspace --all-features
       - run: cargo clippy --locked --workspace --all-features --all-targets -- -D warnings
       - run: cargo test --locked --workspace --all-features

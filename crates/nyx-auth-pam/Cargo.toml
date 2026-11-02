@@ -25,3 +25,7 @@ tempfile = "3"
 name = "pam-try"
 path = "src/bin/pam-try.rs"
 test = false
+
+[[bin]]
+name = "nyx-auth-notify"
+path = "src/bin/nyx-auth-notify.rs"

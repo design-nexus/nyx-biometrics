@@ -11,11 +11,23 @@ const METHOD_MODULES: &[&str] = &["pam_fprintd.so", "pam_u2f.so", "pam_irlume.so
 
 fn is_gate(rule: &Rule, modules: &Modules) -> bool {
     rule.module == "pam_exec.so"
-        && rule.control == "[success=1 default=ignore]"
+        && matches!(rule.control.as_str(), "[success=1 default=ignore]" | "[success=3 default=ignore]")
         && rule.args.len() == 3
         && rule.args[0] == "quiet"
         && rule.args[1] == modules.gate
         && matches!(rule.args[2].as_str(), "built-in" | "local")
+}
+
+/// `auth optional pam_exec.so quiet <notify> start|failed|done <method>`
+fn is_notify(rule: &Rule, modules: &Modules, events: &[&str]) -> bool {
+    let Some(path) = &modules.notify else { return false };
+    rule.module == "pam_exec.so"
+        && rule.control == "optional"
+        && rule.args.len() == 4
+        && rule.args[0] == "quiet"
+        && &rule.args[1] == path
+        && events.contains(&rule.args[2].as_str())
+        && matches!(rule.args[3].as_str(), "face" | "fingerprint" | "key" | "any")
 }
 
 fn is_method(rule: &Rule, modules: &Modules) -> bool {
@@ -40,7 +52,13 @@ pub fn verify(changes: &Changes, files: &dyn Files, modules: &Modules) -> Result
         let Some(text) = &c.contents else { continue };
         let lines = parse::parse(text);
         let lock_service = crate::generate::LOCK_SERVICES.iter().any(|(n, _)| *n == name);
-        if name.starts_with("nyx-auth-") {
+        if name.starts_with("nyx-auth-") && name.ends_with("-session") {
+            let rules: Vec<&Rule> = lines.iter().filter_map(Line::rule).collect();
+            if rules.len() != 1 || rules[0].kind != "session" || !is_notify(rules[0], modules, &["done"]) {
+                errors.push(format!("{name}: must be exactly one optional notify line"));
+            }
+            continue;
+        } else if name.starts_with("nyx-auth-") {
             check_generated(name, &lines, modules, &mut errors);
         } else if lock_service {
             let auth: Vec<&Rule> = lines.iter().filter_map(Line::rule).filter(|r| r.kind == "auth").collect();
@@ -83,9 +101,22 @@ fn check_generated(name: &str, lines: &[Line], modules: &Modules, errors: &mut V
                 errors.push(format!("{name}: line {} must be a required method", i + 1));
             }
         } else if is_gate(r, modules) {
-            match rules.get(i + 1) {
-                Some(next) if next.control == "sufficient" && is_method(next, modules) => i += 1,
-                _ => errors.push(format!("{name}: a gate must be followed by exactly one method")),
+            // The gate's jump must cover exactly its group: the method alone, or
+            // notify-start, the method and notify-failed.
+            let group = r.success_jump().unwrap_or(0);
+            let ok = match group {
+                1 => rules.get(i + 1).is_some_and(|m| m.control == "sufficient" && is_method(m, modules)),
+                3 => {
+                    rules.get(i + 1).is_some_and(|n| is_notify(n, modules, &["start"]))
+                        && rules.get(i + 2).is_some_and(|m| m.control == "sufficient" && is_method(m, modules))
+                        && rules.get(i + 3).is_some_and(|n| is_notify(n, modules, &["failed"]))
+                }
+                _ => false,
+            };
+            if ok {
+                i += group;
+            } else {
+                errors.push(format!("{name}: a gate must be followed by exactly its method group"));
             }
         } else {
             errors.push(format!("{name}: {} {} has no gate in front of it", r.control, r.module));
@@ -110,8 +141,8 @@ fn check_target(name: &str, lines: &[Line], errors: &mut Vec<String>) {
     if inside.is_some() {
         errors.push(format!("{name}: a block isn't closed"));
     }
-    if blocks.len() > 2 {
-        errors.push(format!("{name}: more than two Nyx blocks"));
+    if blocks.len() > 3 {
+        errors.push(format!("{name}: more than three Nyx blocks"));
     }
     let auth_outside: Vec<usize> = lines
         .iter()
@@ -129,6 +160,9 @@ fn check_target(name: &str, lines: &[Line], errors: &mut Vec<String>) {
             errors.push(format!("{name}: an empty block"));
             continue;
         };
+        if inc.kind == "session" {
+            continue;
+        }
         let post = inc.module.ends_with("-required");
         if post && *start < last {
             errors.push(format!("{name}: required methods must come after the password"));
@@ -244,6 +278,22 @@ mod tests {
 
         let wrong_place = tamper("sudo", &format!("auth include system-auth\n{BEGIN}\nauth  include  nyx-auth-sudo\n{END}\n"));
         assert!(verify(&wrong_place, &files(), &m).unwrap_err().iter().any(|e| e.contains("before the password")));
+
+        // A jump that doesn't match its group would land on the wrong line.
+        let notify = "auth  optional  pam_exec.so quiet /usr/lib/nyx-biometrics/nyx-auth-notify";
+        let short =
+            tamper("nyx-auth-sudo", &format!("{gate}{notify} start face\nauth sufficient pam_irlume.so\n{notify} failed face\n"));
+        assert!(verify(&short, &files(), &m).is_err());
+        let long_gate = gate.replace("success=1", "success=3");
+        let missing = tamper("nyx-auth-sudo", &format!("{long_gate}auth sufficient pam_irlume.so\n"));
+        assert!(verify(&missing, &files(), &m).is_err());
+        let good = tamper(
+            "nyx-auth-sudo",
+            &format!("{long_gate}{notify} start face\nauth sufficient pam_irlume.so\n{notify} failed face\n"),
+        );
+        verify(&good, &files(), &m).unwrap();
+        let bad_session = tamper("nyx-auth-sudo-session", "session optional pam_permit.so\n");
+        assert!(verify(&bad_session, &files(), &m).is_err());
 
         let lock = tamper("omarchy-lock-face", "auth sufficient pam_permit.so\n");
         assert!(verify(&lock, &files(), &m).is_err());

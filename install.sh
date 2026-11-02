@@ -8,7 +8,7 @@ cargo build --release --locked --quiet -p nyx-authctl -p nyx-auth-helper -p nyx-
 
 bin="$HOME/.local/bin"
 mkdir -p "$bin"
-for name in nyx-authctl nyx-auth-helper nyx-auth-gate nyx-auth-keyd; do
+for name in nyx-authctl nyx-auth-helper nyx-auth-gate nyx-auth-notify nyx-auth-keyd; do
   install -m 755 "target/release/$name" "$bin/$name"
 done
 echo "Installed nyx-authctl to $bin."

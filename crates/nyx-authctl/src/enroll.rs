@@ -202,6 +202,7 @@ pub fn helper_status() -> ExitCode {
         .and_then(|v| v.trim().parse::<u32>().ok());
     let policy_ok = std::fs::read_to_string(POLICY_FILE).map(|p| p == POLICY).unwrap_or(false)
         && Path::new(nyx_auth_pam::generate::GATE).is_file()
+        && Path::new(nyx_auth_pam::generate::NOTIFY).is_file()
         && Path::new(KEYD).is_file()
         && KEYD_FILES.iter().all(|(path, text)| std::fs::read_to_string(path).is_ok_and(|t| t == *text));
     match (installed, policy_ok) {
@@ -224,7 +225,7 @@ pub fn helper_install() -> ExitCode {
     let Some(here) = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)) else {
         return fail("Can't find the directory nyx-authctl runs from.");
     };
-    for name in ["nyx-auth-helper", "nyx-auth-gate", "nyx-auth-keyd"] {
+    for name in ["nyx-auth-helper", "nyx-auth-gate", "nyx-auth-notify", "nyx-auth-keyd"] {
         if !here.join(name).is_file() {
             return fail(format!("{} doesn't exist. Build it first.", here.join(name).display()));
         }
@@ -242,6 +243,7 @@ pub fn helper_install() -> ExitCode {
     let result = (|| -> std::io::Result<()> {
         install(&here.join("nyx-auth-helper"), INSTALL_PATH)?;
         install(&here.join("nyx-auth-gate"), nyx_auth_pam::generate::GATE)?;
+        install(&here.join("nyx-auth-notify"), nyx_auth_pam::generate::NOTIFY)?;
         install(&here.join("nyx-auth-keyd"), KEYD)?;
         for (path, text) in KEYD_FILES {
             let tmp = Path::new(path).with_extension("nyx-new");

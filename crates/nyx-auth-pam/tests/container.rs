@@ -60,6 +60,11 @@ case "$(cat /mock/state/$name 2>/dev/null)" in
 esac
 "#;
 
+const NOTIFY: &str = r#"#!/bin/sh
+echo "notify-$1-$2" >> /mock/state/calls
+exit 0
+"#;
+
 const GATE: &str = r#"#!/bin/sh
 echo "gate-$1" >> /mock/state/calls
 [ "$(cat /mock/state/remote 2>/dev/null)" = yes ] && exit 0
@@ -91,6 +96,10 @@ const CASES: &[(&str, &str, &str, bool, &str, &str)] = &[
     ("polkit-1", "wrong", "key-pin=match", false, "", ""),
     // A plain touch doesn't satisfy the PIN rule.
     ("polkit-1", "correct horse", "key=match", false, "", "key"),
+    // The shell is told a terminal scan starts, didn't succeed, and that the sign-in finished.
+    ("sudo", "wrong", "face=match", true, "notify-start-face,face,notify-done-any", "notify-failed-face"),
+    ("sudo", "correct horse", "", true, "notify-start-face,notify-failed-face,notify-done-any", ""),
+    ("sudo", "wrong", "remote=yes,face=match", false, "", "notify-start-face,notify-failed-face"),
     // Lock screen services, one method each.
     ("omarchy-lock-face", "wrong", "face=match", true, "face", ""),
     ("omarchy-lock-face", "correct horse", "", false, "face", ""),
@@ -147,6 +156,7 @@ fn real_pam_in_a_container() {
         fs::write(mock.join(name), MOCK).unwrap();
     }
     fs::write(mock.join("gate"), GATE).unwrap();
+    fs::write(mock.join("notify"), NOTIFY).unwrap();
     for e in fs::read_dir(&mock).unwrap() {
         let p = e.unwrap().path();
         if p.is_file() {
@@ -163,7 +173,8 @@ fn real_pam_in_a_container() {
             script.push_str(&format!("echo {v} > /mock/state/{k}\n"));
         }
         script.push_str(&format!(
-            "/in/pam-try {service} tester '{password}' 2>/tmp/log; echo \"case {i} $? $(tr '\\n' ' ' < /mock/state/calls)\"\n"
+            "/in/pam-try {service} tester '{password}' {} 2>/tmp/log; echo \"case {i} $? $(tr '\\n' ' ' < /mock/state/calls)\"\n",
+            if service.starts_with("sudo") { "session" } else { "" }
         ));
     }
     fs::write(root.join("run.sh"), script).unwrap();

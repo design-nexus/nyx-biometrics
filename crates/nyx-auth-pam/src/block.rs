@@ -28,7 +28,13 @@ pub fn strip(text: &str, path: &str) -> Result<Vec<Line>, GenError> {
         }
         if inside {
             match line.rule() {
-                Some(r) if r.kind == "auth" && r.control == "include" && r.module.starts_with("nyx-auth-") => continue,
+                Some(r)
+                    if matches!(r.kind.as_str(), "auth" | "session")
+                        && r.control == "include"
+                        && r.module.starts_with("nyx-auth-") =>
+                {
+                    continue;
+                }
                 None => continue,
                 Some(_) => return Err(GenError::ForeignLineInBlock(path.into())),
             }
@@ -63,6 +69,17 @@ pub fn omarchy(lines: Vec<Line>, path: &str, migrate: bool) -> Result<Vec<Line>,
 
 fn block(name: &str) -> Vec<Line> {
     parse::parse(&format!("{BEGIN}\nauth  include  {name}\n{END}"))
+}
+
+fn session_block(name: &str) -> Vec<Line> {
+    parse::parse(&format!("{BEGIN}\nsession  include  {name}\n{END}"))
+}
+
+/// Put a session block before the first session line, or at the end when there's none.
+pub fn insert_session(mut lines: Vec<Line>, name: &str, _target: &str) -> Result<Vec<Line>, GenError> {
+    let at = lines.iter().position(|l| l.rule().is_some_and(|r| r.kind == "session")).unwrap_or(lines.len());
+    lines.splice(at..at, session_block(name));
+    Ok(lines)
 }
 
 /// Put the pre block before the first auth line and the post block after the last one.
