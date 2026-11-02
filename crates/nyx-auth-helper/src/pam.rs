@@ -80,7 +80,9 @@ fn allowed(path: &str) -> bool {
     }
     let Some(name) = path.strip_prefix("/etc/pam.d/") else { return false };
     let safe = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
-    safe && (matches!(name, "sudo" | "polkit-1" | "sddm") || name.starts_with("nyx-auth-") || name.starts_with("nyx-lock-"))
+    safe && (matches!(name, "sudo" | "polkit-1" | "sddm" | "omarchy-lock-face")
+        || name.starts_with("nyx-auth-")
+        || name.starts_with("nyx-lock-"))
 }
 
 fn ours(text: &str) -> bool {
@@ -172,7 +174,11 @@ pub fn apply(root: &Root, changes: &[FileChange], surface: Surface, id: &str) ->
             return Err(PamError::NotAllowed(c.path.clone()));
         }
         let current = fsx::read_foreign(&root.at(&c.path), MAX_FILE)?;
-        if c.contents.is_none()
+        // Nyx's own stacks may only replace or remove what Nyx wrote; the targets (sudo,
+        // polkit-1, sddm) are edited in place by design.
+        let own_file =
+            !matches!(c.path.as_str(), "/etc/pam.d/sudo" | "/etc/pam.d/polkit-1" | "/etc/pam.d/sddm") || c.contents.is_none();
+        if own_file
             && let Some(text) = &current
             && !ours(text)
         {
@@ -352,6 +358,12 @@ mod tests {
         let remove = FileChange { path: "/etc/pam.d/nyx-auth-foreign".into(), contents: None };
         assert!(matches!(apply(&root, &[remove], Surface::Sudo, "3"), Err(PamError::Foreign(_))));
         assert!(root.at("/etc/pam.d/nyx-auth-foreign").exists());
+
+        // Omarchy may one day write its own face service; never overwrite it.
+        fs::write(root.at("/etc/pam.d/omarchy-lock-face"), "auth required pam_irlume.so\n").unwrap();
+        let face =
+            FileChange { path: "/etc/pam.d/omarchy-lock-face".into(), contents: Some("#%PAM-1.0\n# Nyx Biometrics: x\n".into()) };
+        assert!(matches!(apply(&root, &[face], Surface::LockScreen, "5"), Err(PamError::Foreign(_))));
 
         fs::remove_file(root.at(nyx_auth_pam::generate::GATE)).unwrap();
         let changes = prepare(&root, &recommended(), Surface::Sudo, &inv(), &m).unwrap();

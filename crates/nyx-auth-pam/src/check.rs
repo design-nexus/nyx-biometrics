@@ -8,8 +8,6 @@ use crate::generate::{Changes, Files, Modules, PAM_DIR};
 use crate::parse::{self, Line, Rule};
 
 const METHOD_MODULES: &[&str] = &["pam_fprintd.so", "pam_u2f.so", "pam_irlume.so", "pam_gaze.so"];
-/// What the password service of the lock screen is allowed to contain.
-const LOCK_PASSWORD_MODULES: &[&str] = &["pam_faillock.so", "pam_systemd_home.so", "pam_unix.so", "pam_permit.so", "pam_env.so"];
 
 fn is_gate(rule: &Rule, modules: &Modules) -> bool {
     rule.module == "pam_exec.so"
@@ -41,16 +39,10 @@ pub fn verify(changes: &Changes, files: &dyn Files, modules: &Modules) -> Result
         let Some(name) = c.path.strip_prefix(&format!("{PAM_DIR}/")) else { continue };
         let Some(text) = &c.contents else { continue };
         let lines = parse::parse(text);
+        let lock_service = crate::generate::LOCK_SERVICES.iter().any(|(n, _)| *n == name);
         if name.starts_with("nyx-auth-") {
             check_generated(name, &lines, modules, &mut errors);
-        } else if name == "nyx-lock-password" {
-            for r in lines.iter().filter_map(Line::rule).filter(|r| r.kind == "auth") {
-                if !LOCK_PASSWORD_MODULES.contains(&r.module.as_str()) || (r.module == "pam_permit.so" && r.control != "optional")
-                {
-                    errors.push(format!("{name}: unexpected {} {}", r.control, r.module));
-                }
-            }
-        } else if name.starts_with("nyx-lock-") {
+        } else if lock_service {
             let auth: Vec<&Rule> = lines.iter().filter_map(Line::rule).filter(|r| r.kind == "auth").collect();
             if auth.len() != 1 || auth[0].control != "required" || !is_method(auth[0], modules) {
                 errors.push(format!("{name}: must be exactly one required method line"));
@@ -60,7 +52,7 @@ pub fn verify(changes: &Changes, files: &dyn Files, modules: &Modules) -> Result
         }
         if !name.starts_with("nyx-auth-") || name.ends_with("-required") {
             let stack = expand(name, &view, files, 0, &mut errors);
-            let needs_password = (!name.starts_with("nyx-lock-") || name == "nyx-lock-password") && !name.ends_with("-required");
+            let needs_password = !lock_service && !name.ends_with("-required");
             if needs_password && !stack.iter().any(|r| r.module == "pam_unix.so") {
                 errors.push(format!("{name}: the password (pam_unix) is no longer reachable"));
             }
@@ -253,7 +245,7 @@ mod tests {
         let wrong_place = tamper("sudo", &format!("auth include system-auth\n{BEGIN}\nauth  include  nyx-auth-sudo\n{END}\n"));
         assert!(verify(&wrong_place, &files(), &m).unwrap_err().iter().any(|e| e.contains("before the password")));
 
-        let lock = tamper("nyx-lock-face", "auth sufficient pam_permit.so\n");
+        let lock = tamper("omarchy-lock-face", "auth sufficient pam_permit.so\n");
         assert!(verify(&lock, &files(), &m).is_err());
     }
 }

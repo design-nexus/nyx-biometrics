@@ -8,7 +8,7 @@ pub mod fsx;
 pub mod keys;
 pub mod pam;
 
-pub const HELPER_VERSION: u32 = 2;
+pub const HELPER_VERSION: u32 = 3;
 pub const INSTALL_PATH: &str = "/usr/local/lib/nyx-biometrics/nyx-auth-helper";
 pub const POLICY_FILE: &str = "/usr/share/polkit-1/actions/io.github.design_nexus.nyx.auth.policy";
 pub const POLICY: &str = include_str!("../data/io.github.design_nexus.nyx.auth.policy");

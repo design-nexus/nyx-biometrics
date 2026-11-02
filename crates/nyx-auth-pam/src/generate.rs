@@ -47,7 +47,11 @@ impl Modules {
     }
 
     /// `module args` for a method, or `None` for the password (the target's own stack).
-    pub fn line(&self, method: Method, timeout: u32) -> Result<Option<String>, GenError> {
+    ///
+    /// At login and the lock screen Irlume runs `ondemand`: an empty answer starts one face
+    /// attempt, anything else is the password. At sudo and polkit its consent setting
+    /// decides, so the module takes no argument.
+    pub fn line(&self, method: Method, timeout: u32, surface: Surface) -> Result<Option<String>, GenError> {
         if let Some(dir) = &self.mock_dir {
             let name = match method {
                 Method::Password => return Ok(None),
@@ -60,7 +64,11 @@ impl Modules {
         }
         Ok(Some(match method {
             Method::Password => return Ok(None),
-            Method::Face { .. } => self.face.ok_or(GenError::NoFaceBackend)?.pam_module().to_string(),
+            Method::Face { .. } => {
+                let module = self.face.ok_or(GenError::NoFaceBackend)?.pam_module();
+                let on_demand = self.face == Some(Backend::Irlume) && matches!(surface, Surface::Login | Surface::LockScreen);
+                if on_demand { format!("{module} ondemand") } else { module.to_string() }
+            }
             Method::Fingerprint => format!("pam_fprintd.so max-tries=2 timeout={}", timeout.clamp(5, 60)),
             Method::SecurityKey { check } => {
                 let pin = if check == KeyCheck::Verified { " pinverification=1" } else { "" };
@@ -180,7 +188,7 @@ fn sequential(plan: &Plan, modules: &Modules, files: &dyn Files, target: &'stati
     } else {
         let mut text = header(&format!("{}, methods tried before the password", plan.surface.label()));
         for m in &singles {
-            let line = modules.line(*m, plan.timeout_secs)?.expect("not the password");
+            let line = modules.line(*m, plan.timeout_secs, plan.surface)?.expect("not the password");
             // The gate exits 0 to skip the next line: a remote session, or a closed lid.
             text.push_str(&format!(
                 "auth  [success=1 default=ignore]  pam_exec.so quiet {} {}\n",
@@ -196,7 +204,7 @@ fn sequential(plan: &Plan, modules: &Modules, files: &dyn Files, target: &'stati
     } else {
         let mut text = header(&format!("{}, required after the password", plan.surface.label()));
         for m in &required {
-            let line = modules.line(*m, plan.timeout_secs)?.expect("not the password");
+            let line = modules.line(*m, plan.timeout_secs, plan.surface)?.expect("not the password");
             text.push_str(&format!("auth  required  {line}\n"));
         }
         Some(text)
@@ -231,32 +239,21 @@ fn files_exists(files: &dyn Files, path: &str) -> bool {
     path.strip_prefix("/etc/pam.d/").map(|n| files.etc(n).is_some()).unwrap_or(true)
 }
 
-/// The lock screen runs one PAM service per method at once, as Omarchy's lock does.
-const LOCK_PASSWORD: &str = "auth       required                    pam_faillock.so preauth silent deny=10 unlock_time=120
--auth      [success=2 default=ignore]  pam_systemd_home.so
-auth       [success=1 default=bad]     pam_unix.so try_first_pass nullok
-auth       [default=die]               pam_faillock.so authfail deny=10 unlock_time=120
-auth       optional                    pam_permit.so
-auth       required                    pam_env.so
-auth       required                    pam_faillock.so authsucc
-account    include                     system-local-login
-";
+/// The lock screen runs one PAM service per method at once, as Omarchy's lock does. The
+/// password (`omarchy-lock-password`) and fingerprint (`omarchy-lock-fingerprint`) services
+/// stay Omarchy's own. Face uses `omarchy-lock-face`, the name Irlume recognises as a lock
+/// screen; security keys use `nyx-lock-key`.
+pub const LOCK_SERVICES: [(&str, MethodKind); 2] =
+    [("omarchy-lock-face", MethodKind::Face), ("nyx-lock-key", MethodKind::SecurityKey)];
 
 fn lock(plan: &Plan, modules: &Modules) -> Result<Changes, GenError> {
     let methods: Vec<Method> = plan.alternatives.iter().filter(|a| a.len() == 1).map(|a| a[0]).collect();
     let mut files = Vec::new();
-    for (name, kind) in [
-        ("nyx-lock-password", MethodKind::Password),
-        ("nyx-lock-face", MethodKind::Face),
-        ("nyx-lock-fingerprint", MethodKind::Fingerprint),
-        ("nyx-lock-key", MethodKind::SecurityKey),
-    ] {
-        let method = methods.iter().find(|m| m.kind() == kind);
-        let contents = match method {
+    for (name, kind) in LOCK_SERVICES {
+        let contents = match methods.iter().find(|m| m.kind() == kind) {
             None => None,
-            Some(Method::Password) => Some(format!("{}{LOCK_PASSWORD}", header("lock screen, password"))),
             Some(m) => {
-                let line = modules.line(*m, plan.timeout_secs)?.expect("not the password");
+                let line = modules.line(*m, plan.timeout_secs, Surface::LockScreen)?.expect("not the password");
                 Some(format!(
                     "{}auth       required                    {line}\naccount    include                     system-local-login\n",
                     header(&format!("lock screen, {}", kind.label().to_lowercase()))
@@ -264,10 +261,6 @@ fn lock(plan: &Plan, modules: &Modules) -> Result<Changes, GenError> {
             }
         };
         files.push(FileChange { path: etc_path(name), contents });
-    }
-    // The password service always exists: the lock screen refuses to lock without it.
-    if files[0].contents.is_none() {
-        files[0].contents = Some(format!("{}{LOCK_PASSWORD}", header("lock screen, password")));
     }
     Ok(Changes { surface: Surface::LockScreen, files })
 }
@@ -421,15 +414,28 @@ pub(crate) mod tests {
         let set = PolicySet::recommended(&inventory());
         let c =
             generate(&plan(Surface::LockScreen, &set.lock_screen), &Modules::system(Some(Backend::Irlume)), &files()).unwrap();
-        assert!(get(&c, "/etc/pam.d/nyx-lock-password").unwrap().contains("pam_unix.so"));
-        assert!(get(&c, "/etc/pam.d/nyx-lock-face").unwrap().contains("auth       required                    pam_irlume.so"));
-        assert!(get(&c, "/etc/pam.d/nyx-lock-fingerprint").unwrap().contains("pam_fprintd.so"));
+        assert!(
+            get(&c, "/etc/pam.d/omarchy-lock-face")
+                .unwrap()
+                .contains("auth       required                    pam_irlume.so ondemand\n")
+        );
         assert!(get(&c, "/etc/pam.d/nyx-lock-key").unwrap().contains("pam_u2f.so"));
+        // Omarchy keeps its own password and fingerprint services.
+        assert!(c.files.iter().all(|f| !f.path.contains("omarchy-lock-password") && !f.path.contains("fingerprint")));
 
         let only =
             generate(&plan(Surface::LockScreen, &SurfacePolicy::password_only()), &Modules::system(None), &files()).unwrap();
-        assert!(get(&only, "/etc/pam.d/nyx-lock-password").is_some());
-        assert!(get(&only, "/etc/pam.d/nyx-lock-face").is_none());
+        assert!(get(&only, "/etc/pam.d/omarchy-lock-face").is_none());
+    }
+
+    #[test]
+    fn face_arguments_follow_the_surface() {
+        let m = Modules::system(Some(Backend::Irlume));
+        let face = Method::Face { camera: nyx_auth_core::Camera::Infrared, liveness: true };
+        assert_eq!(m.line(face, 15, Surface::Login).unwrap().unwrap(), "pam_irlume.so ondemand");
+        assert_eq!(m.line(face, 15, Surface::Sudo).unwrap().unwrap(), "pam_irlume.so");
+        let gaze = Modules::system(Some(Backend::Gaze));
+        assert_eq!(gaze.line(face, 15, Surface::LockScreen).unwrap().unwrap(), "pam_gaze.so");
     }
 
     #[test]

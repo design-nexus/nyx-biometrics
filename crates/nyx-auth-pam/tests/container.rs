@@ -92,10 +92,8 @@ const CASES: &[(&str, &str, &str, bool, &str, &str)] = &[
     // A plain touch doesn't satisfy the PIN rule.
     ("polkit-1", "correct horse", "key=match", false, "", "key"),
     // Lock screen services, one method each.
-    ("nyx-lock-password", "correct horse", "", true, "", "face"),
-    ("nyx-lock-password", "wrong", "", false, "", ""),
-    ("nyx-lock-face", "wrong", "face=match", true, "face", ""),
-    ("nyx-lock-face", "correct horse", "", false, "face", ""),
+    ("omarchy-lock-face", "wrong", "face=match", true, "face", ""),
+    ("omarchy-lock-face", "correct horse", "", false, "face", ""),
     ("nyx-lock-key", "", "key=match", true, "key", ""),
     // After restoring, sudo is the stock stack again: matches aren't consulted.
     ("sudo-restored", "wrong", "face=match", false, "", "face,gate-built-in"),
