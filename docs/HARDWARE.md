@@ -61,6 +61,7 @@ enough). Gaze is only needed to test the colour camera on its own.
 | Halo overlay on the lock screen: at rest, scanning, success before unlock | verified 2026-11-02 |
 | sudo face in a local terminal, IR-only, dark room, about 2 s | verified 2026-11-02 |
 | sudo face hands-free (no `yes`), about 1.5 s | verified 2026-11-02 |
+| sudo stack with the scan overlay cue, applied and face-tested through real sudo | verified 2026-11-02 |
 | sudo face skipped over SSH | pending |
 | Administrator prompts (polkit) approved by face, hands-free | verified 2026-11-02 |
 | Same through the Nyx administrator prompt (`design-nexus.auth-polkit`), with the scan overlay | verified 2026-11-02 |

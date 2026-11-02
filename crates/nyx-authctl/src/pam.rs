@@ -139,6 +139,19 @@ fn service(surface: Surface) -> &'static str {
 /// attempt: an empty answer where Irlume runs on demand (login, lock screen), "yes" at its
 /// consent prompt (sudo, polkit). Any later prompt means the face didn't do it.
 fn face_test(surface: Surface) -> Result<(), String> {
+    // Irlume only waives its consent prompt for the real sudo binary, so test through it.
+    // With no input there's no password to fall back on: only the face can pass.
+    if surface == Surface::Sudo {
+        println!("Look at the camera.");
+        let _ = Command::new(SUDO).arg("-k").status();
+        let ok = Command::new(SUDO)
+            .args(["-S", "-p", "", "/usr/bin/true"])
+            .stdin(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        return if ok { Ok(()) } else { Err("the face didn't pass".into()) };
+    }
     let select = if matches!(surface, Surface::Login | Surface::LockScreen) { "" } else { "yes" };
     let mut asked = false;
     println!("Look at the camera.");

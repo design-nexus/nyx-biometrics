@@ -260,7 +260,11 @@ pub fn helper_install() -> ExitCode {
         Ok(()) => {
             let _ = Command::new("/usr/bin/systemctl").arg("daemon-reload").status();
             let _ = Command::new("/usr/bin/systemctl").args(["enable", "--now", "nyx-auth-keyd.socket"]).status();
-            println!("Installed {INSTALL_PATH}, {}, {KEYD}, the key service and {POLICY_FILE}.", nyx_auth_pam::generate::GATE);
+            println!(
+                "Installed {INSTALL_PATH}, {}, {}, {KEYD}, the key service and {POLICY_FILE}.",
+                nyx_auth_pam::generate::GATE,
+                nyx_auth_pam::generate::NOTIFY
+            );
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),
