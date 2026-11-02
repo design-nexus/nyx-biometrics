@@ -8,6 +8,7 @@ use nyx_auth_hw::report::{Paths, Report, Status};
 
 mod enroll;
 mod pam;
+mod status;
 
 const USAGE: &str = "Usage: nyx-authctl <command>
 
@@ -15,6 +16,10 @@ const USAGE: &str = "Usage: nyx-authctl <command>
   policy show           The current policy, by surface
   policy check          Check the policy against this computer's hardware
   policy recommend      The policy setup would suggest for this hardware
+  policy set SURFACE METHOD on|off
+                        Turn face, fingerprint or security-key on or off for login,
+                        lock-screen, sudo, polkit, vault or app-action
+  status --json         Everything Nyx Settings shows, as JSON
 
   keys list                       Registered security keys
   keys add NAME [--backup] [--pin]
@@ -54,6 +59,8 @@ fn main() -> ExitCode {
         ["policy", "show"] => policy_show(),
         ["policy", "check"] => policy_check(),
         ["policy", "recommend"] => policy_recommend(),
+        ["policy", "set", surface, method, on] => status::policy_set(surface, method, on),
+        ["status", "--json"] => status::status(),
         ["keys", "list"] => enroll::keys_list(&user()),
         ["keys", "add", rest @ ..] => enroll::keys_add(rest),
         ["keys", "rename", id, rest @ ..] => enroll::keys_rename(id, rest),
@@ -96,7 +103,7 @@ pub(crate) fn user() -> String {
     }
 }
 
-fn report() -> Report {
+pub(crate) fn report() -> Report {
     Report::collect(&SystemRunner, &Paths::system(), &user())
 }
 
