@@ -166,6 +166,12 @@ fn live_test(surface: Surface, face: bool) -> Result<(), String> {
         });
     }
     match surface {
+        // A real administrator prompt: the polkit agent, the socket-activated helper and the
+        // same PAM stack as every other prompt.
+        Surface::Polkit => {
+            let ok = Command::new("/usr/bin/pkexec").arg("/usr/bin/true").status().map(|s| s.success()).unwrap_or(false);
+            if ok { Ok(()) } else { Err("the administrator prompt didn't accept".into()) }
+        }
         Surface::Sudo => {
             let _ = Command::new(SUDO).arg("-k").status();
             // With Irlume's consent prompt on, its "use your face?" question arrives as sudo's
