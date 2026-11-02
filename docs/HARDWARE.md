@@ -24,7 +24,8 @@ The IR stream exceeds Windows Hello's published IR minimum (340x340 at 15 fps).
 camera, which needs room light. This machine runs Irlume in IR-only mode
 (`irlume auth sensor ir-only`, cameras pinned with `irlume set-cameras /dev/video0 /dev/video2`),
 like Windows Hello: the IR emitter lights the face and Irlume's IR anti-spoofing model still
-runs. Irlume labels IR-only experimental.
+runs. Irlume labels IR-only experimental. Privileged prompts are hands-free
+(`irlume auth consent hands-free`): sudo and polkit scan as soon as they prompt, with no `yes`.
 
 **Not yet known:**
 - whether the IR emitter lights without help. Many UVC IR modules start dark. Irlume probes
@@ -58,6 +59,7 @@ enough). Gaze is only needed to test the colour camera on its own.
 | Gaze on `/dev/video0` reports presence only | pending |
 | Lock screen face unlock, explicit wake only | pending (Phase 4) |
 | sudo face in a local terminal, IR-only, dark room, about 2 s | verified 2026-11-02 |
+| sudo face hands-free (no `yes`), about 1.5 s | verified 2026-11-02 |
 | sudo face skipped over SSH | pending |
 
 ## TEC ESS TE-FPA-CA1 fingerprint reader

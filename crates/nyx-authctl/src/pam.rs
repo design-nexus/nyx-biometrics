@@ -161,10 +161,10 @@ fn live_test(surface: Surface, face: bool) -> Result<(), String> {
     match surface {
         Surface::Sudo => {
             let _ = Command::new(SUDO).arg("-k").status();
-            // Irlume's "use your face?" question arrives as sudo's ordinary password prompt,
-            // which reads as a request for the password; name both answers.
+            // With Irlume's consent prompt on, its "use your face?" question arrives as sudo's
+            // ordinary password prompt; name both answers.
             let ok = Command::new(SUDO)
-                .args(["-p", "Face: type yes and look at the camera. Or type your password: ", "/usr/bin/true"])
+                .args(["-p", "Look at the camera (type yes first if asked), or type your password: ", "/usr/bin/true"])
                 .status()
                 .map(|s| s.success())
                 .unwrap_or(false);

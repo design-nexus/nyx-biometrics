@@ -47,7 +47,12 @@ where we can't.
 - *Threat*: the screen unlocks because the person (or someone resembling them) happens to
   be in front of it; a face check runs without the person meaning to authenticate.
 - *Mitigations*: face runs only after an explicit request (a wake, a key press, a prompt
-  that names its purpose), with a short timeout. The camera is closed between attempts.
+  that names its purpose), with a short timeout.
+- *Owner choice, hands-free sudo and polkit*: Irlume normally asks for a typed `yes` before
+  scanning at sudo and polkit. An owner can waive that (`irlume auth consent hands-free`,
+  chosen on Ken's G16). Then any program running as the user can get root by running
+  `sudo` while the user is in view; remote sessions and a closed lid stay excluded. The
+  Phase 4 overlay must show visibly whenever a scan runs, so it can't happen unnoticed. The camera is closed between attempts.
   Hands-free unlock is off by default and separate. A visible overlay shows whenever a
   face check runs.
 
