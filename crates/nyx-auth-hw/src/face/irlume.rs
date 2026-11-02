@@ -9,6 +9,7 @@ use crate::cmd::Runner;
 
 pub const IRLUME: &str = "/usr/bin/irlume";
 pub const CONTRACT: &str = "1";
+const ENV: &str = "/usr/bin/env";
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Doctor checks that must pass before an infrared match counts as live. Irlume's IR gate
@@ -49,11 +50,13 @@ pub fn probe(runner: &dyn Runner, user: &str) -> Probe {
         probe.enrolled = Some(0);
         probe.notes.push("Face sign-in is turned off in Irlume".into());
     }
-    if data["templates"].as_str() == Some("plaintext") {
-        probe.notes.push("Face templates aren't encrypted (no TPM)".into());
+    if data["templates"].as_str() == Some("plaintext") && probe.enrolled.is_some_and(|n| n > 0) {
+        probe.notes.push("Irlume stores this face unencrypted".into());
     }
 
-    match machine(runner, &["doctor", "--json", "--contract", CONTRACT, "--user", user]) {
+    // doctor takes its account from $USER, not --user.
+    let user_env = format!("USER={user}");
+    match machine_via(runner, ENV, &[&user_env, IRLUME, "doctor", "--json", "--contract", CONTRACT]) {
         Ok(doc) => {
             let checks = doc["data"]["checks"].as_array().cloned().unwrap_or_default();
             let state = |id: &str| checks.iter().find(|c| c["id"] == id).and_then(|c| c["state"].as_str()).unwrap_or("missing");
@@ -77,14 +80,19 @@ pub fn probe(runner: &dyn Runner, user: &str) -> Probe {
 /// Runs a machine command and returns its document, or why it failed. A document with
 /// `ok: false` is reported by its error code.
 fn machine(runner: &dyn Runner, args: &[&str]) -> Result<Value, String> {
-    let out = runner.run(IRLUME, args, TIMEOUT).map_err(|e| e.to_string())?;
-    let doc: Value = serde_json::from_str(out.stdout.trim()).map_err(|_| format!("irlume {} gave no JSON", args[0]))?;
+    machine_via(runner, IRLUME, args)
+}
+
+fn machine_via(runner: &dyn Runner, program: &str, args: &[&str]) -> Result<Value, String> {
+    let out = runner.run(program, args, TIMEOUT).map_err(|e| e.to_string())?;
+    let verb = args.iter().find(|a| !a.contains('/') && !a.contains('=')).copied().unwrap_or("command");
+    let doc: Value = serde_json::from_str(out.stdout.trim()).map_err(|_| format!("irlume {verb} gave no JSON"))?;
     if doc["contract_version"].as_u64() != Some(1) {
         return Err("irlume doesn't speak machine contract 1".into());
     }
     if doc["ok"].as_bool() != Some(true) {
         let code = doc["error"]["code"].as_str().unwrap_or("unknown");
-        return Err(format!("irlume {}: {code}", args[0]));
+        return Err(format!("irlume {verb}: {code}"));
     }
     Ok(doc)
 }
@@ -95,7 +103,7 @@ mod tests {
     use crate::cmd::{FakeRunner, Output};
 
     const STATUS: &str = "/usr/bin/irlume status --json --contract 1 --user ken";
-    const DOCTOR: &str = "/usr/bin/irlume doctor --json --contract 1 --user ken";
+    const DOCTOR: &str = "/usr/bin/env USER=ken /usr/bin/irlume doctor --json --contract 1";
 
     fn status(daemon: &str, profiles: u32, ir: bool) -> String {
         format!(
