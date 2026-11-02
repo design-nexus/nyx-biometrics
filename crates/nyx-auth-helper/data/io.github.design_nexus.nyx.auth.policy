@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Nyx Biometrics</vendor>
+  <vendor_url>https://github.com/design-nexus/nyx-biometrics</vendor_url>
+
+  <action id="io.github.design_nexus.nyx.auth.keys-add">
+    <description>Register a security key for signing in</description>
+    <message>Authentication is required to register a security key for signing in</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/nyx-biometrics/nyx-auth-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">keys-add</annotate>
+  </action>
+
+  <action id="io.github.design_nexus.nyx.auth.keys-remove">
+    <description>Remove a security key from signing in</description>
+    <message>Authentication is required to remove a security key from signing in</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/nyx-biometrics/nyx-auth-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">keys-remove</annotate>
+  </action>
+
+  <action id="io.github.design_nexus.nyx.auth.keys-rename">
+    <description>Rename a security key</description>
+    <message>Authentication is required to rename a security key</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/nyx-biometrics/nyx-auth-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">keys-rename</annotate>
+  </action>
+
+  <action id="io.github.design_nexus.nyx.auth.keys-import-omarchy">
+    <description>Use security keys registered by Omarchy</description>
+    <message>Authentication is required to use the security keys Omarchy registered</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/nyx-biometrics/nyx-auth-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">keys-import-omarchy</annotate>
+  </action>
+</policyconfig>

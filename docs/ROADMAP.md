@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **done** (merged and tested), **in progress**, **planned**, **blocked** (waiting on
+Status: **done** (merged and tested), **done (review)** (tested, in an open pull request), **in progress**, **planned**, **blocked** (waiting on
 something outside this repository), **pending hardware** (code done, not yet run on the
 device).
 
@@ -13,19 +13,19 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 | Audit of existing repositories and the G16 ([AUDIT.md](AUDIT.md)) | done |
 | Architecture ([ARCHITECTURE.md](ARCHITECTURE.md)) | done |
 | Threat model ([THREAT_MODEL.md](THREAT_MODEL.md)) | done |
-| `nyx-auth-core`: methods, assurance, surfaces, policy engine | in progress |
-| `nyx-auth-proto`: `Auth1` interface types and client | in progress |
+| `nyx-auth-core`: methods, assurance, surfaces, policy engine | done (review) |
+| `nyx-auth-proto`: `Auth1` interface types and client | done (review) |
 
 ## Phase 2: hardware and enrollment
 
 | Item | Status |
 |---|---|
-| Discovery: cameras (IR/RGB), fprintd readers, FIDO2 keys, TPM | planned |
-| Adapters with mocks: fprintd, FIDO2, Irlume (IR), Gaze (RGB), password | planned |
-| One face backend per camera; backend switching | planned |
-| `nyx-authctl doctor` | planned |
-| `nyx-auth-helper` with argv-matched polkit actions | planned |
-| Enrollment and management: fingers, faces, named primary and backup keys | planned |
+| Discovery: cameras (IR/RGB), fprintd readers, FIDO2 keys, TPM | done (review) |
+| Adapters with mocks: fprintd, FIDO2, Irlume (IR), Gaze (RGB), password | done (review) |
+| One face backend per camera | done (review) |
+| `nyx-authctl doctor` | done (review); verified on the G16 |
+| `nyx-auth-helper` with argv-matched polkit actions | done (review); not installed |
+| Enrollment and management: fingers, faces, named primary and backup keys | done (review), [ENROLLMENT.md](ENROLLMENT.md) |
 | **Gate**: install packages, IR emitter setup, real enrollment | planned |
 | G16 IR camera with Irlume | pending hardware |
 | G16 RGB camera with Gaze | pending hardware |

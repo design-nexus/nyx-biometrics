@@ -1,0 +1,19 @@
+[package]
+name = "nyx-auth-hw"
+description = "Hardware discovery and enrollment adapters for Nyx Biometrics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+nyx-auth-core = { path = "../nyx-auth-core" }
+serde.workspace = true
+serde_json = "1"
+toml.workspace = true
+thiserror.workspace = true
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

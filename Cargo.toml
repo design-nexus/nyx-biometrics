@@ -3,6 +3,9 @@ resolver = "3"
 members = [
   "crates/nyx-auth-core",
   "crates/nyx-auth-proto",
+  "crates/nyx-auth-hw",
+  "crates/nyx-authctl",
+  "crates/nyx-auth-helper",
 ]
 
 [workspace.package]
