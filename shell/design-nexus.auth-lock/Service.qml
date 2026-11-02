@@ -36,7 +36,7 @@ Item {
   // What the overlay shows: idle, scanning, failure (briefly), success.
   property string facePhase: "idle"
   // Overlay look, from ~/.config/nyx/auth/overlay.json ("lock-screen"), set in Settings.
-  property string overlayStyle: "circular"
+  property string overlayStyle: "halo"
   property real overlayIntensity: 0.7
   property bool overlayAnimate: true
   readonly property int faceMaxFailures: 3
@@ -960,7 +960,7 @@ Item {
     onLoaded: {
       try {
         var lock = JSON.parse(text())["lock-screen"] || {}
-        if (["circular", "cyberpunk", "minimal", "edge"].indexOf(lock.style) >= 0) root.overlayStyle = lock.style
+        if (["halo", "circular", "cyberpunk", "minimal", "edge"].indexOf(lock.style) >= 0) root.overlayStyle = lock.style
         if (typeof lock.intensity === "number") root.overlayIntensity = Math.max(0, Math.min(1, lock.intensity))
         if (typeof lock.animate === "boolean") root.overlayAnimate = lock.animate
       } catch (e) {

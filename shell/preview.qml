@@ -21,6 +21,7 @@ ShellRoot {
 
       Repeater {
         model: [
+          ["halo", "face", "scanning"], ["halo", "fingerprint", "scanning"], ["halo", "key", "pin"], ["halo", "face", "success"], ["halo", "face", "failure"],
           ["circular", "face", "scanning"], ["circular", "fingerprint", "scanning"], ["circular", "key", "pin"], ["circular", "face", "success"], ["circular", "face", "failure"],
           ["cyberpunk", "face", "scanning"], ["cyberpunk", "fingerprint", "scanning"], ["cyberpunk", "key", "scanning"], ["cyberpunk", "face", "success"], ["cyberpunk", "face", "timeout"],
           ["minimal", "face", "scanning"], ["minimal", "fingerprint", "failure"], ["minimal", "key", "pin"], ["minimal", "password", "scanning"], ["minimal", "face", "success"],

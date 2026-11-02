@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import "common"
 import "mockups"
@@ -13,7 +14,7 @@ ShellRoot {
     ["cyberpunk", "Cyberpunk scanner", "Current"],
     ["minimal", "Minimal floating", "Current"],
     ["edge", "Edge glow", "Current"],
-    ["Halo", "Halo", "Nyx Design 2.0"],
+    ["halo", "Halo", "Nyx Design 2.0, blended"],
     ["Nocturne", "Nocturne", "Nyx, goddess of night"],
     ["Eclipse", "Eclipse", "Nyx, goddess of night"],
     ["NeonGrid", "Neon Grid", "Cyberpunk"],
@@ -40,7 +41,8 @@ ShellRoot {
     implicitHeight: 800
     color: "#06060a"
 
-    // A night backdrop standing in for the blurred wallpaper.
+    // A night backdrop, or the real wallpaper blurred as the lock screen does
+    // (NYX_MOCK_WALLPAPER=path).
     Rectangle {
       anchors.fill: parent
       gradient: Gradient {
@@ -48,6 +50,23 @@ ShellRoot {
         GradientStop { position: 0.6; color: "#08080f" }
         GradientStop { position: 1; color: "#050507" }
       }
+    }
+    Image {
+      id: wallpaper
+      anchors.fill: parent
+      source: Quickshell.env("NYX_MOCK_WALLPAPER") ? "file://" + Quickshell.env("NYX_MOCK_WALLPAPER") : ""
+      fillMode: Image.PreserveAspectCrop
+      visible: false
+    }
+    MultiEffect {
+      anchors.fill: wallpaper
+      source: wallpaper
+      visible: wallpaper.status === Image.Ready
+      blurEnabled: true
+      blur: 1.0
+      blurMax: 128
+      blurMultiplier: 1.25
+      contrast: -0.08
     }
 
     Text {
@@ -85,6 +104,7 @@ ShellRoot {
       onLoaded: {
         item.phase = "scanning"
         if (item.style !== undefined) item.style = shell.current[0]
+        if (item.detail !== undefined) item.detail = "Face · infrared"
       }
     }
 

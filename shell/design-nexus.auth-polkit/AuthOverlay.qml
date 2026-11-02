@@ -3,7 +3,7 @@ import QtQuick
 // One authentication indicator in four styles. It only draws: callers set the method and
 // state from their PAM flow, so a preview can show it without authenticating anything.
 //
-//   style:  "circular" | "cyberpunk" | "minimal" | "edge"
+//   style:  "halo" | "circular" | "cyberpunk" | "minimal" | "edge"
 //   method: "face" | "fingerprint" | "key" | "password"
 //   phase:  "idle" | "scanning" | "success" | "failure" | "timeout" | "pin"
 //
@@ -25,6 +25,11 @@ Item {
   // 0..1: how strong glows and sweeps are.
   property real intensity: 0.7
   property bool animate: true
+  // Halo sits straight on what's behind it (Nyx Design 2.0: one blended surface). A card
+  // is only for places with nothing calm behind them.
+  property bool card: false
+  // The second line under Halo's message, such as "Face · infrared".
+  property string detail: method === "fingerprint" ? "Fingerprint" : method === "key" ? "Security key" : method === "password" ? "Password" : "Face"
 
   readonly property bool active: phase === "scanning" || phase === "pin"
   readonly property color tone: phase === "success" ? good : (phase === "failure" ? bad : (phase === "timeout" ? dim : accent))
@@ -47,13 +52,13 @@ Item {
       if (method === "fingerprint") return "Touch the fingerprint reader"
       if (method === "key") return "Touch your security key"
       if (method === "password") return "Enter your password"
-      return "Looking for you…"
+      return style === "halo" ? "Looking for you" : "Looking for you…"
     }
     return ""
   }
 
-  implicitWidth: style === "edge" ? 640 : (style === "minimal" ? pill.implicitWidth : 220)
-  implicitHeight: style === "edge" ? 400 : (style === "minimal" ? 44 : 220)
+  implicitWidth: style === "edge" ? 640 : (style === "minimal" ? pill.implicitWidth : style === "halo" ? 248 : 220)
+  implicitHeight: style === "edge" ? 400 : (style === "minimal" ? 44 : style === "halo" ? 268 : 220)
 
   // A failure shakes once, in every style.
   SequentialAnimation {
@@ -66,6 +71,82 @@ Item {
   }
   property real shift: 0
   onPhaseChanged: if (phase === "failure" && animate) shake.restart()
+
+  // ---------- Halo (Nyx Design 2.0) ----------
+  // One solid card, two quiet rings, the accent used once.
+  Rectangle {
+    id: halo
+    visible: root.style === "halo"
+    anchors.centerIn: parent
+    anchors.horizontalCenterOffset: root.shift
+    width: 248
+    height: 268
+    radius: 15
+    color: root.card ? root.surface : "transparent"
+    border.width: root.card ? 1 : 0
+    border.color: Qt.rgba(root.text.r, root.text.g, root.text.b, 0.08)
+
+    Canvas {
+      id: haloRings
+      width: 150
+      height: 150
+      anchors.horizontalCenter: parent.horizontalCenter
+      y: 30
+      property real spin: 0
+      NumberAnimation on spin {
+        running: root.animate && root.active && root.style === "halo"
+        from: 0; to: 360; duration: 2400; loops: Animation.Infinite
+      }
+      onSpinChanged: requestPaint()
+      Connections { target: root; function onToneChanged() { haloRings.requestPaint() } function onPhaseChanged() { haloRings.requestPaint() } }
+      Component.onCompleted: requestPaint()
+      onPaint: {
+        var g = getContext("2d")
+        g.reset()
+        var cx = width / 2, cy = height / 2
+        g.lineCap = "round"
+        g.strokeStyle = Qt.rgba(root.text.r, root.text.g, root.text.b, 0.07)
+        g.lineWidth = 1.5
+        g.beginPath(); g.arc(cx, cy, 66, 0, Math.PI * 2); g.stroke()
+        g.beginPath(); g.arc(cx, cy, 56, 0, Math.PI * 2); g.stroke()
+        g.strokeStyle = root.tone
+        g.lineWidth = 3
+        g.globalAlpha = 0.5 + 0.5 * root.intensity
+        if (root.active) {
+          var a = spin * Math.PI / 180
+          g.beginPath(); g.arc(cx, cy, 66, a, a + Math.PI * 0.5); g.stroke()
+          g.globalAlpha *= 0.5
+          g.beginPath(); g.arc(cx, cy, 56, -a * 1.4, -a * 1.4 + Math.PI * 0.3); g.stroke()
+        } else if (root.phase !== "idle") {
+          g.beginPath(); g.arc(cx, cy, 66, 0, Math.PI * 2); g.stroke()
+        }
+      }
+    }
+    Text {
+      anchors.centerIn: haloRings
+      text: root.glyph
+      color: root.tone
+      font.pixelSize: 46
+    }
+    Text {
+      anchors.horizontalCenter: parent.horizontalCenter
+      y: 200
+      width: parent.width - 24
+      horizontalAlignment: Text.AlignHCenter
+      elide: Text.ElideRight
+      text: root.label
+      color: root.phase === "failure" ? root.bad : root.text
+      font.pixelSize: 16
+      font.weight: Font.Medium
+    }
+    Text {
+      anchors.horizontalCenter: parent.horizontalCenter
+      y: 226
+      text: root.phase === "failure" || root.phase === "timeout" ? "Try again or type your password" : root.detail
+      color: root.dim
+      font.pixelSize: 12
+    }
+  }
 
   // ---------- Circular face scan ----------
   Item {

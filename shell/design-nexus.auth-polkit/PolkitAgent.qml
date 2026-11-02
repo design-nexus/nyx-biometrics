@@ -41,12 +41,17 @@ Item {
   // Nyx Biometrics put a face module before the password (nyx-auth-polkit-1).
   property bool faceConfigured: false
   // Overlay look, from ~/.config/nyx/auth/overlay.json ("polkit"), set in Settings.
-  property string overlayStyle: "circular"
+  property string overlayStyle: "halo"
   property real overlayIntensity: 0.7
   property bool overlayAnimate: true
   property int shakeOffset: 0
 
-  readonly property bool dialogVisible: polkitAgent.isActive || closing
+  // The agent lives in a Loader so it can be made again: polkit takes one agent per session,
+  // and one refused while another was still registered (a live switch, or this plugin
+  // reloading over itself) never asks again.
+  readonly property var polkitAgent: agentLoader.item
+  property int registerAttempts: 0
+  readonly property bool dialogVisible: (!!polkitAgent && polkitAgent.isActive) || closing
   // We show one method at a time. Fingerprint owns the dialog while PAM is
   // waiting on the reader (lid open, sensor enrolled); the moment PAM asks for
   // a password — including immediately when the lid is shut and the clamshell
@@ -55,7 +60,7 @@ Item {
   // face being checked: show the scan instead of the field.
   readonly property bool faceMode: faceConfigured && !laptopClosed && dialogVisible && !responseRequired && !submitted && !errorFlash
   readonly property bool fingerprintMode: !faceMode && fingerprintConfigured && !laptopClosed && dialogVisible && !responseRequired && !submitted && !errorFlash
-  readonly property int faceSize: Style.space(248)
+  readonly property int faceSize: Style.space(overlayStyle === "halo" ? 276 : 248)
   readonly property int cardHeight: faceMode ? faceSize : panel.height > 0 ? Math.min(fieldHeight + contentMargin * 2, panel.height - Style.gapsOut * 2) : fieldHeight + contentMargin * 2
   // Password mode is a wide field; fingerprint mode collapses to a square that
   // just frames the centered sensor icon.
@@ -86,7 +91,7 @@ Item {
   }
 
   function syncFromFlow() {
-    var flow = polkitAgent.flow
+    var flow = polkitAgent ? polkitAgent.flow : null
     if (!flow) return
 
     currentMessage = String(flow.message || "")
@@ -118,7 +123,7 @@ Item {
   }
 
   function submitResponse() {
-    var flow = polkitAgent.flow
+    var flow = polkitAgent ? polkitAgent.flow : null
     if (!flow || !flow.isResponseRequired) return
     submitted = true
     errorFlash = false
@@ -128,7 +133,7 @@ Item {
   }
 
   function cancelRequest() {
-    var flow = polkitAgent.flow
+    var flow = polkitAgent ? polkitAgent.flow : null
     passwordInput.text = ""
     submitted = false
     closing = true
@@ -197,7 +202,7 @@ Item {
     onLoaded: {
       try {
         var p = JSON.parse(text())["polkit"] || {}
-        if (["circular", "cyberpunk", "minimal", "edge"].indexOf(p.style) >= 0) root.overlayStyle = p.style
+        if (["halo", "circular", "cyberpunk", "minimal", "edge"].indexOf(p.style) >= 0) root.overlayStyle = p.style
         if (typeof p.intensity === "number") root.overlayIntensity = Math.max(0, Math.min(1, p.intensity))
         if (typeof p.animate === "boolean") root.overlayAnimate = p.animate
       } catch (e) {
@@ -213,27 +218,45 @@ Item {
     onExited: root.laptopClosed = String(laptopClosedOut.text || "").trim() === "closed"
   }
 
-  PolkitAgent {
-    id: polkitAgent
-    path: "/org/omarchy/PolkitAgent"
+  Loader {
+    id: agentLoader
+    sourceComponent: PolkitAgent {
+      path: "/org/omarchy/PolkitAgent"
 
-    onAuthenticationRequestStarted: root.beginFlow()
-    onIsActiveChanged: {
-      if (isActive) root.syncFromFlow()
-      else if (!root.closing) root.resetSnapshot()
+      onAuthenticationRequestStarted: root.beginFlow()
+      onIsActiveChanged: {
+        if (isActive) root.syncFromFlow()
+        else if (!root.closing) root.resetSnapshot()
+      }
+      onIsRegisteredChanged: {
+        if (isRegistered) {
+          root.registerAttempts = 0
+          console.log("nyx polkit agent registered")
+        } else {
+          console.warn("nyx polkit agent is not registered; another agent may be running")
+        }
+      }
     }
-    onIsRegisteredChanged: {
-      if (isRegistered) console.log("nyx polkit agent registered")
-      else console.warn("omarchy polkit agent is not registered; another agent may be running")
+  }
+
+  // Not registered a moment after loading: make the agent again, a few times.
+  Timer {
+    interval: 2000
+    repeat: true
+    running: root.registerAttempts < 10 && !!root.polkitAgent && !root.polkitAgent.isRegistered && !root.dialogVisible
+    onTriggered: {
+      root.registerAttempts += 1
+      agentLoader.active = false
+      agentLoader.active = true
     }
   }
 
   Connections {
-    target: polkitAgent.flow
+    target: root.polkitAgent ? root.polkitAgent.flow : null
 
     function onIsResponseRequiredChanged() {
       root.syncFromFlow()
-      if (!polkitAgent.flow || !polkitAgent.flow.isResponseRequired) passwordInput.text = ""
+      if (!root.polkitAgent || !root.polkitAgent.flow || !root.polkitAgent.flow.isResponseRequired) passwordInput.text = ""
       Qt.callLater(root.refocus)
     }
 

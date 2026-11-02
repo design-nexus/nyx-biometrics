@@ -16,7 +16,7 @@ Item {
   property bool faceAuthenticating: false
   property string faceMessage: ""
   property string facePhase: "idle"
-  property string overlayStyle: "circular"
+  property string overlayStyle: "halo"
   property real overlayIntensity: 0.7
   property bool overlayAnimate: true
   readonly property bool overlayShown: faceConfigured && facePhase !== "idle"
@@ -331,8 +331,9 @@ Item {
       text: Commons.Color.lock.text
       dim: Commons.Color.lock.placeholder
       bad: Commons.Color.lock.textError
-      width: style === "edge" ? parent.width : (style === "minimal" ? implicitWidth : 240)
-      height: style === "edge" ? parent.height : (style === "minimal" ? 44 : 240)
+      width: style === "edge" ? parent.width : (style === "minimal" ? implicitWidth : style === "halo" ? 260 : 240)
+      height: style === "edge" ? parent.height : (style === "minimal" ? 44 : style === "halo" ? 280 : 240)
+      detail: "Face · infrared"
       x: style === "edge" ? 0 : inputField.x + (inputField.width - width) / 2
       y: style === "edge" ? 0 : (style === "minimal" ? inputField.y + inputField.height + 18 : inputField.y - height - 28)
     }
