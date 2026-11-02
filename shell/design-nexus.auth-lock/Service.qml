@@ -33,6 +33,12 @@ Item {
   property string faceMessage: ""
   property double faceLastStartMs: 0
   property int faceFailures: 0
+  // What the overlay shows: idle, scanning, failure (briefly), success.
+  property string facePhase: "idle"
+  // Overlay look, from ~/.config/nyx/auth/overlay.json ("lock-screen"), set in Settings.
+  property string overlayStyle: "circular"
+  property real overlayIntensity: 0.7
+  property bool overlayAnimate: true
   readonly property int faceMaxFailures: 3
   property int fingerprintUnreachedStreak: 0
   property bool fingerprintAttemptReachedDevice: false
@@ -228,6 +234,7 @@ Item {
     faceMessage = ""
     faceFailures = 0
     faceLastStartMs = 0
+    facePhase = "idle"
   }
 
   function beginLock() {
@@ -414,7 +421,8 @@ Item {
 
     faceLastStartMs = now
     faceAnswered = false
-    faceMessage = "Looking for you…"
+    faceMessage = ""
+    facePhase = "scanning"
     faceAuthenticating = true
     if (!facePam.start()) settleFace(false)
   }
@@ -437,10 +445,13 @@ Item {
     faceAuthenticating = false
     if (success) {
       faceMessage = ""
+      facePhase = "success"
       finishUnlock()
       return
     }
     faceFailures += 1
+    facePhase = "failure"
+    facePhaseTimer.restart()
     faceMessage = faceFailures >= faceMaxFailures ? "Face not recognised. Type your password." : "Face not recognised"
     logEvent("face-failed: count=" + faceFailures)
   }
@@ -575,6 +586,10 @@ Item {
         faceConfigured: root.faceConfigured
         faceAuthenticating: root.faceAuthenticating
         faceMessage: root.faceMessage
+        facePhase: root.facePhase
+        overlayStyle: root.overlayStyle
+        overlayIntensity: root.overlayIntensity
+        overlayAnimate: root.overlayAnimate
         authenticatingPassword: root.authenticatingPassword
         failureMessage: root.failureMessage
         failedAttempts: root.failedAttempts
@@ -928,6 +943,30 @@ Item {
     onLoaded: root.passwordPamConfigured = true
     onLoadFailed: root.passwordPamConfigured = false
     onFileChanged: reload()
+  }
+
+  Timer {
+    id: facePhaseTimer
+    interval: 2500
+    repeat: false
+    onTriggered: if (!root.faceAuthenticating) root.facePhase = "idle"
+  }
+
+  FileView {
+    path: root.home + "/.config/nyx/auth/overlay.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        var lock = JSON.parse(text())["lock-screen"] || {}
+        if (["circular", "cyberpunk", "minimal", "edge"].indexOf(lock.style) >= 0) root.overlayStyle = lock.style
+        if (typeof lock.intensity === "number") root.overlayIntensity = Math.max(0, Math.min(1, lock.intensity))
+        if (typeof lock.animate === "boolean") root.overlayAnimate = lock.animate
+      } catch (e) {
+        root.logEvent("overlay-config: " + e)
+      }
+    }
   }
 
   FileView {

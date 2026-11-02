@@ -15,6 +15,11 @@ Item {
   property bool faceConfigured: false
   property bool faceAuthenticating: false
   property string faceMessage: ""
+  property string facePhase: "idle"
+  property string overlayStyle: "circular"
+  property real overlayIntensity: 0.7
+  property bool overlayAnimate: true
+  readonly property bool overlayShown: faceConfigured && facePhase !== "idle"
   property bool authenticatingPassword: false
   property string failureMessage: ""
   property int failedAttempts: 0
@@ -310,13 +315,35 @@ Item {
       }
     }
 
+    // The scan indicator, in the style chosen in Settings. Only while something is
+    // happening: a locked screen at rest shows just the face icon in the field.
+    AuthOverlay {
+      objectName: "faceOverlay"
+      visible: root.overlayShown
+      style: root.overlayStyle
+      method: "face"
+      phase: root.facePhase
+      message: root.faceMessage
+      intensity: root.overlayIntensity
+      animate: root.overlayAnimate
+      accent: Commons.Color.lock.borderActive
+      surface: Commons.Color.lock.background
+      text: Commons.Color.lock.text
+      dim: Commons.Color.lock.placeholder
+      bad: Commons.Color.lock.textError
+      width: style === "edge" ? parent.width : (style === "minimal" ? implicitWidth : 240)
+      height: style === "edge" ? parent.height : (style === "minimal" ? 44 : 240)
+      x: style === "edge" ? 0 : inputField.x + (inputField.width - width) / 2
+      y: style === "edge" ? 0 : (style === "minimal" ? inputField.y + inputField.height + 18 : inputField.y - height - 28)
+    }
+
     Text {
       objectName: "faceStatus"
       textFormat: Text.PlainText
       anchors.top: inputField.bottom
       anchors.topMargin: 18
       anchors.horizontalCenter: inputField.horizontalCenter
-      visible: root.faceConfigured && root.faceMessage.length > 0 && !(root.fingerprintConfigured && root.fingerprintUnavailable)
+      visible: root.faceConfigured && !root.overlayShown && root.faceMessage.length > 0 && !(root.fingerprintConfigured && root.fingerprintUnavailable)
       text: root.faceMessage
       color: Commons.Color.lock.placeholder
       font.family: Style.font.family
