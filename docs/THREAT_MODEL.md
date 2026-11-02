@@ -140,8 +140,12 @@ where we can't.
 
 ### Vault key exposure
 
-- The wrapping key is never in the user's session at rest. Face and fingerprint unlock
-  depend on root-held, TPM-sealed material released after a root-run PAM check.
+- The key is never in the user's session at rest. Face and fingerprint unlock depend on
+  root-held, TPM-sealed material released only after polkit confirms the asking process
+  (an `auth_self` action, answered through the `polkit-1` stack).
+- With hands-free face at administrator prompts, a program running as the user that can
+  start `nyx-passwordsd` gets the vault opened if the user is in view when it asks. The
+  polkit prompt is shown on screen each time.
 - Security-key unlock derives the wrapping key from the key with `hmac-secret`; nothing
   that unlocks is stored.
 - The existing keyring unlock (raw user key in Secret Service) stays opt-in and is labelled

@@ -41,7 +41,10 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 | Snapshots, atomic writes, 120-second auto-rollback | done (review) |
 | Migration of Omarchy's `pam_u2f` and `pam_fprintd` lines | done (review) |
 | Container suite (Docker, Arch, real PAM, mock modules): 22 cases | done (review) |
-| **Gate**: live sudo, polkit-1, SDDM and lock services, one at a time | planned |
+| **Gate**: sudo (face, hands-free) | done, verified on the G16 |
+| **Gate**: polkit-1 (face, hands-free) | done, verified on the G16 |
+| **Gate**: lock screen face service (`omarchy-lock-face`) | done, verified on the G16 |
+| **Gate**: SDDM | skipped on the G16: autologin is on, so the login screen only appears after logging out |
 
 ## Phase 4: native interface
 
@@ -49,21 +52,21 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 |---|---|
 | Design 2.0 tokens export for QML (nyx-design) | planned |
 | QML `NyxAuth`: four styles, every method and state | planned |
-| `design-nexus.auth-lock` from `ken.lock` (face and key contexts) | planned |
+| `design-nexus.auth-lock` from `ken.lock` (face on wake) | done, in use on the G16 |
 | `design-nexus.auth-polkit`, `design-nexus.auth-prompt` (with preview mode) | planned |
 | SDDM theme | planned |
 | `nyx-authd` broker | planned |
-| Nyx Settings: Sign-in & Security section, Users-page summary card | planned |
+| Nyx Settings: Sign-in & Security page, Users-page link | done (review: nyx-settings#1), installed |
 | Reusable setup flow | planned |
 | Nyx Setup integration | blocked: no Nyx Setup repository |
-| **Gate**: switch lock and polkit plugins | planned |
+| **Gate**: switch lock plugin | done (`ken.lock` kept as rollback) |
 
 ## Phase 5: Nyx Passwords
 
 | Item | Status |
 |---|---|
-| `nyx-auth-keyd`: TPM-sealed wrapping key, PAM-gated release | planned |
-| Face and fingerprint quick unlock | planned |
+| `nyx-auth-keyd`: TPM-sealed key, polkit-confirmed release | done (review), not installed yet |
+| Face and fingerprint quick unlock | done (review: nyx-passwords#1), not installed: another session's Passwords work is installed |
 | Security-key unlock with `hmac-secret` | planned |
 | Re-prompt through the broker | planned |
 | Passkey user verification through the broker | planned |
