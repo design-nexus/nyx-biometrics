@@ -446,7 +446,8 @@ Item {
     if (success) {
       faceMessage = ""
       facePhase = "success"
-      finishUnlock()
+      // Let the check show for a moment before the lock goes away.
+      faceUnlockTimer.restart()
       return
     }
     faceFailures += 1
@@ -943,6 +944,13 @@ Item {
     onLoaded: root.passwordPamConfigured = true
     onLoadFailed: root.passwordPamConfigured = false
     onFileChanged: reload()
+  }
+
+  Timer {
+    id: faceUnlockTimer
+    interval: 450
+    repeat: false
+    onTriggered: if (root.lockRequested) root.finishUnlock()
   }
 
   Timer {

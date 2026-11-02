@@ -126,6 +126,8 @@ Item {
       anchors.centerIn: haloRings
       text: root.glyph
       color: root.tone
+      // At rest the icon sits back with the rings.
+      opacity: root.phase === "idle" ? 0.55 : 1
       font.pixelSize: 46
     }
     Text {

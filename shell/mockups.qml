@@ -102,9 +102,11 @@ ShellRoot {
       height: shell.current[0] === "edge" ? parent.height : (shell.current[0] === "minimal" ? 60 : 300)
       sourceComponent: shell.component(shell.current[0])
       onLoaded: {
-        item.phase = "scanning"
+        var phase = Quickshell.env("NYX_MOCK_PHASE") || "scanning"
+        item.phase = phase
         if (item.style !== undefined) item.style = shell.current[0]
-        if (item.detail !== undefined) item.detail = "Face · infrared"
+        if (item.detail !== undefined) item.detail = phase === "idle" ? "Move the mouse or press a key" : "Face · infrared"
+        if (item.message !== undefined && phase === "idle") item.message = "Wake to use your face"
       }
     }
 

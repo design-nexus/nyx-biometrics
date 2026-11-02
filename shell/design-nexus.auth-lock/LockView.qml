@@ -19,7 +19,9 @@ Item {
   property string overlayStyle: "halo"
   property real overlayIntensity: 0.7
   property bool overlayAnimate: true
-  readonly property bool overlayShown: faceConfigured && facePhase !== "idle"
+  // Halo stays on the locked screen whenever face is set up, dim at rest, so it's clear a
+  // glance will unlock. The other styles only appear while something is happening.
+  readonly property bool overlayShown: faceConfigured && (facePhase !== "idle" || overlayStyle === "halo")
   property bool authenticatingPassword: false
   property string failureMessage: ""
   property int failedAttempts: 0
@@ -323,7 +325,7 @@ Item {
       style: root.overlayStyle
       method: "face"
       phase: root.facePhase
-      message: root.faceMessage
+      message: root.facePhase === "idle" ? "Wake to use your face" : root.faceMessage
       intensity: root.overlayIntensity
       animate: root.overlayAnimate
       accent: Commons.Color.lock.borderActive
@@ -333,7 +335,7 @@ Item {
       bad: Commons.Color.lock.textError
       width: style === "edge" ? parent.width : (style === "minimal" ? implicitWidth : style === "halo" ? 260 : 240)
       height: style === "edge" ? parent.height : (style === "minimal" ? 44 : style === "halo" ? 280 : 240)
-      detail: "Face · infrared"
+      detail: root.facePhase === "idle" ? "Move the mouse or press a key" : "Face · infrared"
       x: style === "edge" ? 0 : inputField.x + (inputField.width - width) / 2
       y: style === "edge" ? 0 : (style === "minimal" ? inputField.y + inputField.height + 18 : inputField.y - height - 28)
     }
