@@ -1,0 +1,19 @@
+name: Standalone check
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container: archlinux@sha256:e43f1fd80e073992c5f173efbbbf65144170bf60aeb7369940087d63eacea8f4
+    steps:
+      - name: Prepare Git checkout
+        run: |
+          printf 'Server = https://archive.archlinux.org/repos/2026/10/20/$repo/os/$arch\n' > /etc/pacman.d/mirrorlist
+          pacman -Syyuu --noconfirm --needed git rust gcc pkgconf
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - run: cargo check --locked --workspace --all-features
+      - run: cargo clippy --locked --workspace --all-features --all-targets -- -D warnings
+      - run: cargo test --locked --workspace --all-features
