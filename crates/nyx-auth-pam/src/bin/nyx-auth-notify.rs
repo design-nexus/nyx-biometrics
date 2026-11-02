@@ -3,6 +3,7 @@
 //! Always exits 0: it only tells the shell what to show.
 
 use std::ffi::CString;
+use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
@@ -20,10 +21,26 @@ fn uid_of(user: &str) -> Option<u32> {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (Some(event), Some(method)) = (args.first(), args.get(1)) else { return ExitCode::SUCCESS };
-    let user = std::env::var("PAM_USER").unwrap_or_default();
+    // In sudo's session step PAM_USER is the target account (often root); the person at
+    // the screen is the one who asked.
+    let user = std::env::var("PAM_RUSER")
+        .ok()
+        .filter(|u| !u.is_empty() && u != "root")
+        .or_else(|| std::env::var("PAM_USER").ok())
+        .unwrap_or_default();
     let service = std::env::var("PAM_SERVICE").unwrap_or_default();
     let Some(uid) = uid_of(&user) else { return ExitCode::SUCCESS };
-    let Some(argv) = notify::command(event, method, &service, &user, uid) else { return ExitCode::SUCCESS };
+    // The sign-in waits on this; never more than a second in all.
+    let deadline = Instant::now() + Duration::from_secs(1);
+    for display in notify::displays(Path::new(&format!("/run/user/{uid}"))) {
+        if let Some(argv) = notify::command(event, method, &service, &user, uid, &display) {
+            deliver(&argv, deadline);
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn deliver(argv: &[String], deadline: Instant) {
     let Ok(mut child) = Command::new(&argv[0])
         .args(&argv[1..])
         .env_clear()
@@ -32,10 +49,8 @@ fn main() -> ExitCode {
         .stderr(Stdio::null())
         .spawn()
     else {
-        return ExitCode::SUCCESS;
+        return;
     };
-    // The sign-in waits on this; never more than a second.
-    let deadline = Instant::now() + Duration::from_secs(1);
     loop {
         match child.try_wait() {
             Ok(Some(_)) | Err(_) => break,
@@ -47,5 +62,4 @@ fn main() -> ExitCode {
             Ok(None) => std::thread::sleep(Duration::from_millis(10)),
         }
     }
-    ExitCode::SUCCESS
 }
