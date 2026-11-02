@@ -21,3 +21,4 @@ for plugin in design-nexus.auth-lock design-nexus.auth-polkit; do
   mv "$stage" "$plugins/$plugin"
   echo "Installed $plugin to $plugins."
 done
+echo "Restart the shell to load them: omarchy-restart-shell"

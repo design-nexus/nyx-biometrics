@@ -1031,6 +1031,8 @@ Item {
         fingerprint: root.fingerprintConfigured,
         face: root.faceConfigured,
         faceFailures: root.faceFailures,
+        overlay: root.overlayStyle,
+        version: "0.2.0",
         fingerprintUnavailable: root.fingerprintUnavailable,
         authenticating: root.authenticating,
         lastEvent: root.lastEvent,
