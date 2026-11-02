@@ -3,18 +3,19 @@
 //! Always exits 0: it only tells the shell what to show.
 
 use std::ffi::CString;
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 use nyx_auth_pam::notify;
 
-fn uid_of(user: &str) -> Option<u32> {
+fn ids_of(user: &str) -> Option<(u32, u32)> {
     let name = CString::new(user).ok()?;
-    // SAFETY: getpwnam returns static storage or null; the uid is read at once.
+    // SAFETY: getpwnam returns static storage or null; the ids are read at once.
     unsafe {
         let pw = libc::getpwnam(name.as_ptr());
-        (!pw.is_null()).then(|| (*pw).pw_uid)
+        (!pw.is_null()).then(|| ((*pw).pw_uid, (*pw).pw_gid))
     }
 }
 
@@ -29,26 +30,33 @@ fn main() -> ExitCode {
         .or_else(|| std::env::var("PAM_USER").ok())
         .unwrap_or_default();
     let service = std::env::var("PAM_SERVICE").unwrap_or_default();
-    let Some(uid) = uid_of(&user) else { return ExitCode::SUCCESS };
+    let Some((uid, gid)) = ids_of(&user) else { return ExitCode::SUCCESS };
+    // pam_exec runs this as the caller's real user (sudo: the user) or as root; anyone else
+    // has no business talking to this user's shell.
+    // SAFETY: plain id queries.
+    let (ruid, euid) = unsafe { (libc::getuid(), libc::geteuid()) };
+    let switch = match (ruid, euid) {
+        (r, e) if r == uid && e == uid => false,
+        (_, 0) => true,
+        _ => return ExitCode::SUCCESS,
+    };
     // The sign-in waits on this; never more than a second in all.
     let deadline = Instant::now() + Duration::from_secs(1);
     for display in notify::displays(Path::new(&format!("/run/user/{uid}"))) {
         if let Some(argv) = notify::command(event, method, &service, &user, uid, &display) {
-            deliver(&argv, deadline);
+            let mut cmd = Command::new(&argv[0]);
+            cmd.args(&argv[1..]);
+            if switch {
+                cmd.uid(uid).gid(gid);
+            }
+            deliver(cmd, deadline);
         }
     }
     ExitCode::SUCCESS
 }
 
-fn deliver(argv: &[String], deadline: Instant) {
-    let Ok(mut child) = Command::new(&argv[0])
-        .args(&argv[1..])
-        .env_clear()
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-    else {
+fn deliver(mut cmd: Command, deadline: Instant) {
+    let Ok(mut child) = cmd.env_clear().stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() else {
         return;
     };
     loop {

@@ -1,10 +1,9 @@
 //! `nyx-auth-notify`: tells the user's shell that a terminal sign-in is checking a face,
-//! fingerprint or key, so it can show the scan. Run by `pam_exec` as root, it drops to the
-//! user and calls the Omarchy shell's IPC with a fixed set of words. It never carries
+//! fingerprint or key, so it can show the scan. Run by `pam_exec` (as the caller's real user,
+//! or as root), it runs as the user and calls the Omarchy shell's IPC with a fixed set of words. It never carries
 //! anything secret and never affects the sign-in: it always exits 0, quickly.
 
 pub const SHELL_CONFIG: &str = "/usr/share/omarchy/shell";
-pub const RUNUSER: &str = "/usr/bin/runuser";
 pub const QUICKSHELL: &str = "/usr/bin/quickshell";
 
 /// The user's Wayland displays: `quickshell ipc` only finds a shell on the display it's told.
@@ -69,10 +68,6 @@ pub fn command(event: &str, method: &str, service: &str, user: &str, uid: u32, d
     }
     Some(
         [
-            RUNUSER,
-            "-u",
-            user,
-            "--",
             "/usr/bin/env",
             "-i",
             &format!("XDG_RUNTIME_DIR=/run/user/{uid}"),
@@ -103,8 +98,7 @@ mod tests {
     #[test]
     fn builds_a_fixed_command() {
         let c = command("start", "face", "sudo", "ken", 1000, "wayland-1").unwrap();
-        assert_eq!(c[0], RUNUSER);
-        assert_eq!(&c[1..3], ["-u", "ken"]);
+        assert_eq!(&c[..2], ["/usr/bin/env", "-i"]);
         assert!(c.contains(&"XDG_RUNTIME_DIR=/run/user/1000".to_string()));
         assert!(c.contains(&"WAYLAND_DISPLAY=wayland-1".to_string()));
         assert_eq!(&c[c.len() - 5..], ["nyx-auth", "notify", "start", "sudo", "face"]);
