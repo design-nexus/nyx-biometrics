@@ -92,15 +92,33 @@ where we can't.
 - *Spoofed prompt*: a process draws a fake "Nyx" prompt to collect a password. We can't
   prevent drawing. Mitigations: the real prompts never ask for the password when a
   biometric or key is offered first; the lock screen is drawn by the session-lock client
-  only; the prompt names the caller as the broker identified it.
+  only.
 - *Request confusion*: a process asks the broker to authenticate with a misleading purpose
   or someone else's action. Mitigations: actions are scoped to the caller's verified
-  prefix; the prompt shows the verified caller name, not one the request supplies; purpose
-  is short plain text with no control characters.
+  prefix, so a program can only ask for its own; the purpose is short plain text with no
+  control characters and goes only to the caller, not the audit log. *Limit*: the prompt
+  itself shows polkit's fixed message ("Confirm it's you to allow this"), not the caller
+  or purpose: polkit lets only root pass a message of its own, and the broker runs as the
+  user. The asking app says what it's for in its own window (the Assistant's approval,
+  Passwords' page).
+- *A stand-in broker*: any program running as the user can claim a session-bus name and
+  answer "granted". Clients connect with `nyx_auth_proto::connect`, which checks the
+  name's owner is this user's `nyx-authd` from where the suite installs it and then talks
+  to that connection only; anything else falls back to polkit directly, a system service.
+  Checked by hand with a program holding the name: refused, nothing asked.
+- *Caller identity*: the broker knows a caller by the process behind its bus connection
+  (uid, executable, start time). A process that connects and then replaces itself with an
+  allowed program keeps the connection; the worst it gets is a prompt in that program's
+  name, which the person still has to answer. Programs in `~/.local/bin` are trusted as
+  the suite's, as Nyx Passwords' daemon already trusts its peers: a process running as the
+  user that can replace them can also replace the apps themselves.
 - *Self-approval*: there is no approve method on the broker. A grant needs a successful
   authentication at the prompt.
-- *Grant theft*: grants are bound to the caller's connection identity and action, are
-  short, and end on lock, sleep and logout. They aren't bearer tokens.
+- *Grant theft*: grants are bound to the caller's identity and action, last at most five
+  minutes, and end on any session lock and before sleep; they live only in the broker's
+  memory, so logout ends them too. They aren't bearer tokens. The apps ask with no grant
+  (once) today.
+- *Prompt flooding*: one prompt at a time and six requests a minute per caller.
 - *Launching an allowed binary*: a process can start `nyx-passwords` or another allowed
   client. That client still has to pass the broker prompt for protected actions.
 
@@ -158,10 +176,13 @@ where we can't.
 ### Agent-initiated credential access
 
 - Assistant and Glimpse never receive secrets: copies go through the daemon's clipboard.
-- Protected items need a broker authentication with the agent named as the caller and the
-  purpose shown. The agent can't answer the prompt.
-- Assistant approvals for `Privileged` and `Secrets` require a broker authentication,
-  replacing the same-user socket approval for those capabilities.
+- Protected items copied from Glimpse need a broker authentication (when "Protected items
+  in Glimpse" is on in Passwords; off, they stay in Passwords). The agent can't answer the
+  prompt.
+- Assistant approvals for `Secrets` need a broker authentication on top of the key press;
+  `Privileged` already needs polkit's `auth_admin`.
+- Passkeys: a site that requires user verification gets a broker authentication before
+  anything is signed.
 
 ### Lost devices and recovery
 

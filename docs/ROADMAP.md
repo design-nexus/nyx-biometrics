@@ -54,11 +54,11 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 | `AuthOverlay.qml`: four styles, every method and state, with a preview | done |
 | `design-nexus.auth-lock` from `ken.lock` (face on wake) | done, in use on the G16 |
 | `design-nexus.auth-polkit` with the scan overlay | done, in use on the G16 |
-| `design-nexus.auth-prompt` for app requests and sudo status | planned |
+| `design-nexus.auth-prompt`: the sudo scan overlay | done, in use on the G16 (app requests use the administrator prompt's face card) |
 | SDDM theme | done: `nyx-biometrics`, Omarchy's screen with Halo; `nyx-authctl login-theme on\|off` |
-| `nyx-authd` broker | planned |
-| Nyx Settings: Sign-in & Security page, Users-page link | done (review: nyx-settings#1), installed |
-| Reusable setup flow | planned |
+| `nyx-authd` broker | done: session bus, verified callers, polkit prompt, grants, audit; in use |
+| Nyx Settings: Sign-in & Security page, login screen switch, SSH keys | done, merged, installed |
+| Reusable setup flow | contract written ([SETUP.md](SETUP.md)); the commands exist |
 | Nyx Setup integration | blocked: no Nyx Setup repository |
 | **Gate**: switch lock plugin | done (`ken.lock` kept as rollback) |
 
@@ -66,30 +66,30 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 
 | Item | Status |
 |---|---|
-| `nyx-auth-keyd`: TPM-sealed key, polkit-confirmed release | done (review), not installed yet |
-| Face and fingerprint quick unlock | done (review: nyx-passwords#1), not installed: another session's Passwords work is installed |
+| `nyx-auth-keyd`: TPM-sealed key, polkit-confirmed release | done, in use |
+| Face and fingerprint quick unlock | done, in use: face first, from Passwords and Glimpse |
 | Security-key unlock with `hmac-secret` | planned |
-| Re-prompt through the broker | planned |
-| Passkey user verification through the broker | planned |
+| Re-prompt through the broker | done for Glimpse copies of protected items (opt-in) |
+| Passkey user verification through the broker | done: when a site requires it |
 | FIDO2/WebAuthn two-step sign-in | planned |
 
 ## Phase 6: extended integrations
 
 | Item | Status |
 |---|---|
-| SSH agent for Bitwarden SSH key items, per-use approval | planned |
-| OpenSSH `sk` keys: guidance and detection | planned |
-| Assistant: `Secrets` approvals also need the person to sign in (polkit `app-action`) | done (review: nyx-assistant#1); `Privileged` already needs `auth_admin` |
-| Glimpse: protected items through the broker | planned |
+| SSH agent for Bitwarden SSH key items, per-use approval | done in Nyx Passwords (its own agent) |
+| OpenSSH `sk` keys | done: `nyx-authctl ssh-key`, Settings, [SSH.md](SSH.md); untested without a key |
+| Assistant: `Secrets` approvals also need the person to sign in | done, through the broker; `Privileged` already needs `auth_admin` |
+| Glimpse: protected items through the broker; face unlock from the locked row | done, in use |
 
 ## Phase 7: hardening
 
 | Item | Status |
 |---|---|
-| Security review of every privileged component | planned |
-| Recovery drills from a TTY | planned |
+| Security review of every privileged component | done: one fix (stand-in broker), limits in [THREAT_MODEL.md](THREAT_MODEL.md) |
+| Recovery drills | done in the container suite and live auto-rollback; TTY steps in RECOVERY.md |
 | `ENROLLMENT.md`, `RECOVERY.md`, `HARDWARE.md` | first versions done |
-| Final summary: completed, blocked, deferred | planned |
+| Final summary: completed, blocked, deferred | done: [STATUS.md](STATUS.md) |
 
 ## Not planned
 
