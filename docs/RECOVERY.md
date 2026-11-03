@@ -58,6 +58,9 @@ those). To remove Nyx Biometrics entirely:
 2. If `/etc/pam.d/polkit-1` starts with `# Created by Nyx Biometrics`, delete it.
 3. Delete `/etc/pam.d/nyx-auth-*` and `/etc/pam.d/nyx-lock-*`.
 4. Delete the polkit drop-in above and run `systemctl daemon-reload`.
+5. Delete `/etc/sddm.conf.d/zz-nyx-biometrics.conf` to put Omarchy's login screen back
+   (`nyx-authctl login-theme off` does the same). The theme in
+   `/usr/share/sddm/themes/nyx-biometrics` is then unused.
 
 From a live USB, mount your root partition and do the same under its mount point.
 

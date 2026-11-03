@@ -1,0 +1,7 @@
+[SddmGreeterTheme]
+Name=Nyx Biometrics
+Description=Omarchy's login screen with face sign-in (Nyx Biometrics Halo)
+Author=Design Nexus
+Type=sddm-theme
+Version=1.0
+QtVersion=6
