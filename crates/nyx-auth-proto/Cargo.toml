@@ -1,0 +1,17 @@
+[package]
+name = "nyx-auth-proto"
+description = "D-Bus interface and client for the Nyx authentication broker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+client = ["dep:zbus"]
+
+[dependencies]
+nyx-auth-core = { path = "../nyx-auth-core", features = ["dbus"] }
+serde.workspace = true
+zvariant = "5"
+zbus = { workspace = true, optional = true }
