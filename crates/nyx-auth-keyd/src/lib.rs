@@ -13,6 +13,14 @@ use zeroize::Zeroizing;
 
 /// Apps that may keep secrets here, by executable name.
 pub const CLIENTS: &[&str] = &["nyx-passwordsd"];
+
+/// Whether `exe` is installed where the suite installs its programs: the user's
+/// `~/.local/bin`, or the system's. A program of the right name anywhere else (one the
+/// user's other programs could make) is refused, as the broker refuses it.
+pub fn installed(exe: &Path, home: &Path) -> bool {
+    exe.parent()
+        .is_some_and(|dir| dir == home.join(".local/bin") || dir == Path::new("/usr/bin") || dir == Path::new("/usr/local/bin"))
+}
 pub const STATE: &str = "/var/lib/nyx-biometrics/vault";
 pub const ACTION_LOAD: &str = "io.github.design_nexus.nyx.auth.unlock";
 pub const ACTION_STORE: &str = "io.github.design_nexus.nyx.auth.enroll-unlock";
@@ -239,5 +247,22 @@ mod tests {
         assert!(k.handle(&p, Request::Clear { name: "vault-a".into() }).ok);
         assert!(yes.asked.borrow().is_empty());
         assert_eq!(k.handle(&p, Request::Exists { name: "vault-a".into() }).exists, Some(false));
+    }
+
+    #[test]
+    fn programs_only_where_the_suite_installs_them() {
+        let home = Path::new("/home/u");
+        assert!(installed(Path::new("/home/u/.local/bin/nyx-passwordsd"), home));
+        assert!(installed(Path::new("/usr/bin/nyx-passwordsd"), home));
+        assert!(installed(Path::new("/usr/local/bin/nyx-passwordsd"), home));
+        for elsewhere in [
+            "/tmp/nyx-passwordsd",
+            "/home/u/nyx-passwordsd",
+            "/home/u/.local/bin/sub/nyx-passwordsd",
+            "/home/other/.local/bin/nyx-passwordsd",
+            "nyx-passwordsd",
+        ] {
+            assert!(!installed(Path::new(elsewhere), home), "{elsewhere}");
+        }
     }
 }

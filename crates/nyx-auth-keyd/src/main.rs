@@ -3,10 +3,11 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::fd::FromRawFd;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use nyx_auth_hw::{Runner, SystemRunner};
-use nyx_auth_keyd::{Keyd, Peer, STATE, System};
+use nyx_auth_keyd::{Keyd, Peer, STATE, System, installed};
 use nyx_auth_proto::keyd::{MAX_LINE, Reply, Request};
 use zeroize::Zeroizing;
 
@@ -82,15 +83,37 @@ fn peer(fd: i32) -> Result<Peer, String> {
         stat[stat.rfind(')')? + 1..].split_whitespace().nth(19)?.parse::<u64>().ok()
     };
     let start_time = start(pid).ok_or("the peer is gone")?;
-    let exe = std::fs::read_link(format!("/proc/{pid}/exe"))
-        .ok()
-        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().trim_end_matches(" (deleted)").to_string()))
-        .ok_or("can't see the peer's program")?;
+    let path = std::fs::read_link(format!("/proc/{pid}/exe"))
+        .map(|p| PathBuf::from(p.to_string_lossy().trim_end_matches(" (deleted)")))
+        .map_err(|_| "can't see the peer's program")?;
+    let home = home_of(cred.uid).ok_or("the peer's user has no home")?;
+    if !installed(&path, &home) {
+        return Err("this program isn't installed where the suite installs it".into());
+    }
+    let exe = path.file_name().map(|n| n.to_string_lossy().to_string()).ok_or("can't see the peer's program")?;
     // Read the start time again: if the pid was reused meanwhile, it changed.
     if start(pid) != Some(start_time) {
         return Err("the peer changed".into());
     }
     Ok(Peer { uid: cred.uid, pid, start_time, exe })
+}
+
+/// The user's home directory from the password database.
+fn home_of(uid: u32) -> Option<PathBuf> {
+    // SAFETY: `passwd` is plain data; all-zero is a valid value to be filled in.
+    let mut pwd: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut buf = vec![0u8; 4096];
+    let mut found: *mut libc::passwd = std::ptr::null_mut();
+    // SAFETY: `pwd`, `buf` and `found` are valid for writes of the sizes given; on success
+    // `pw_dir` points into `buf`, which outlives its use here.
+    let rc = unsafe { libc::getpwuid_r(uid, &mut pwd, buf.as_mut_ptr().cast(), buf.len(), &mut found) };
+    if rc != 0 || found.is_null() || pwd.pw_dir.is_null() {
+        return None;
+    }
+    // SAFETY: getpwuid_r returned a NUL-terminated string inside `buf`.
+    let dir = unsafe { std::ffi::CStr::from_ptr(pwd.pw_dir) };
+    use std::os::unix::ffi::OsStrExt;
+    Some(PathBuf::from(std::ffi::OsStr::from_bytes(dir.to_bytes())))
 }
 
 fn main() {
@@ -116,5 +139,19 @@ fn main() {
     let _ = output.write_all(text.as_bytes());
     if let Some(mut s) = reply.secret {
         zeroize::Zeroize::zeroize(&mut s);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn home_of_this_user() {
+        // SAFETY: getuid has no preconditions.
+        let uid = unsafe { libc::getuid() };
+        let home = super::home_of(uid).expect("this user has a home");
+        assert!(home.is_absolute(), "{}", home.display());
+        if let Some(env) = std::env::var_os("HOME").filter(|h| !h.is_empty()) {
+            assert_eq!(home, std::path::PathBuf::from(env));
+        }
     }
 }
