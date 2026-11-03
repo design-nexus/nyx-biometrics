@@ -12,5 +12,8 @@ nyx-auth-core = { path = "../nyx-auth-core" }
 nyx-auth-hw = { path = "../nyx-auth-hw" }
 nyx-auth-helper = { path = "../nyx-auth-helper" }
 nyx-auth-pam = { path = "../nyx-auth-pam" }
+nyx-auth-proto = { path = "../nyx-auth-proto", features = ["client"] }
+zbus.workspace = true
+tokio = { version = "1", features = ["rt", "time", "net"] }
 serde_json = "1"
 libc = "0.2"

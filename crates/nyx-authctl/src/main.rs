@@ -48,6 +48,8 @@ const USAGE: &str = "Usage: nyx-authctl <command>
 
   login-theme on|off|status       Use the Nyx login screen (Halo for the face) or
                                   Omarchy's own
+  broker test                     Ask the sign-in broker (nyx-authd) to confirm it's you,
+                                  as a Nyx app would. Grants nothing
   helper status                   Whether the root helper is installed and current
   helper install                  Install the root helper and its polkit actions (run with sudo)
 ";
@@ -82,6 +84,7 @@ fn main() -> ExitCode {
         ["login-theme", "on"] => enroll::helper(&["login-theme", "on"], None),
         ["login-theme", "off"] => enroll::helper(&["login-theme", "off"], None),
         ["login-theme", "status"] => login_theme_status(),
+        ["broker", "test"] => broker_test(),
         ["helper", "status"] => enroll::helper_status(),
         ["helper", "install"] => enroll::helper_install(),
         ["help" | "--help" | "-h"] => {
@@ -238,4 +241,43 @@ fn login_theme_status() -> ExitCode {
         (false, _) => println!("Not installed. Run: sudo nyx-authctl helper install"),
     }
     ExitCode::SUCCESS
+}
+
+/// One request through the broker, as Nyx apps make them (the broker's owner checked
+/// first), to check the whole path.
+fn broker_test() -> ExitCode {
+    use nyx_auth_proto::{Outcome, Request, Surface};
+    let run = async {
+        let conn = zbus::Connection::session().await?;
+        nyx_auth_proto::connect(&conn)
+            .await?
+            .authenticate(Request {
+                action: "io.github.design_nexus.nyx.authctl.test".into(),
+                purpose: "Test the sign-in broker (grants nothing)".into(),
+                surface: Surface::AppAction,
+                grant_secs: 0,
+            })
+            .await
+    };
+    println!("Confirm it's you when the prompt appears.");
+    let reply = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+        Ok(rt) => rt.block_on(run),
+        Err(e) => return fail_msg(e),
+    };
+    match reply {
+        Ok(r) if r.outcome == Outcome::Granted => {
+            println!("Granted.");
+            ExitCode::SUCCESS
+        }
+        Ok(r) => {
+            println!("Not granted: {:?}.", r.outcome);
+            ExitCode::FAILURE
+        }
+        Err(e) => fail_msg(format!("The broker didn't answer: {e}")),
+    }
+}
+
+fn fail_msg(e: impl std::fmt::Display) -> ExitCode {
+    eprintln!("{e}");
+    ExitCode::FAILURE
 }
