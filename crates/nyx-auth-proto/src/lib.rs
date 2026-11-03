@@ -133,6 +133,42 @@ pub trait Auth {
     fn methods(&self) -> zbus::Result<Vec<MethodStatus>>;
 }
 
+/// Where the real broker is installed.
+#[cfg(feature = "client")]
+fn broker_program(exe: &std::path::Path) -> bool {
+    let home = std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+    exe.file_name().is_some_and(|n| n == "nyx-authd")
+        && exe.parent().is_some_and(|d| {
+            d == home.join(".local/bin") || d == std::path::Path::new("/usr/bin") || d == std::path::Path::new("/usr/local/bin")
+        })
+}
+
+/// The broker, checked before anything is asked of it: any program running as the user can
+/// claim a session-bus name, so the name's owner must be this user's `nyx-authd` from where
+/// the suite installs it. The proxy then talks to that connection only, so the name moving
+/// to another one later changes nothing. Starts the broker if it isn't running.
+#[cfg(feature = "client")]
+pub async fn connect(conn: &zbus::Connection) -> zbus::Result<AuthProxy<'static>> {
+    use zbus::fdo::DBusProxy;
+    let dbus = DBusProxy::new(conn).await?;
+    let name = zbus::names::BusName::try_from(BUS_NAME)?;
+    let _ = dbus.start_service_by_name(BUS_NAME.try_into()?, 0).await;
+    let owner = dbus.get_name_owner(name).await?;
+    let creds = dbus.get_connection_credentials(owner.clone().into()).await?;
+    // SAFETY: getuid has no preconditions.
+    let me = unsafe { libc::getuid() };
+    let (Some(pid), Some(uid)) = (creds.process_id(), creds.unix_user_id()) else {
+        return Err(zbus::Error::Failure("the broker's owner has no credentials".into()));
+    };
+    let exe = std::fs::read_link(format!("/proc/{pid}/exe"))
+        .map_err(|_| zbus::Error::Failure("can't see the broker's program".into()))?;
+    if uid != me || !broker_program(&exe) {
+        return Err(zbus::Error::Failure("the broker's name is held by another program".into()));
+    }
+    let owner: zbus::names::UniqueName<'static> = owner.as_ref().to_owned();
+    AuthProxy::builder(conn).destination(owner)?.build().await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,6 +202,16 @@ mod tests {
         r.surface = Surface::Vault;
         r.grant_secs = MAX_GRANT_SECS + 1;
         assert!(r.validate(PREFIX).is_err());
+    }
+
+    #[cfg(feature = "client")]
+    #[test]
+    fn only_the_installed_broker_counts() {
+        let home = std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+        assert!(super::broker_program(&home.join(".local/bin/nyx-authd")));
+        assert!(super::broker_program(std::path::Path::new("/usr/bin/nyx-authd")));
+        assert!(!super::broker_program(std::path::Path::new("/tmp/nyx-authd")));
+        assert!(!super::broker_program(&home.join(".local/bin/python3")));
     }
 
     #[test]
