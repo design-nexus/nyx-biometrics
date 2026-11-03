@@ -349,6 +349,7 @@ dependencies = [
  "nyx-auth-hw",
  "nyx-auth-pam",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
