@@ -12,7 +12,7 @@ jobs:
       - name: Prepare Git checkout
         run: |
           printf 'Server = https://archive.archlinux.org/repos/2026/10/20/$repo/os/$arch\n' > /etc/pacman.d/mirrorlist
-          pacman -Syyuu --noconfirm --needed git rust gcc pkgconf
+          pacman -Syyuu --noconfirm --needed git rust gcc pkgconf diffutils
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - name: Plugins carry the shared overlay
         run: |
