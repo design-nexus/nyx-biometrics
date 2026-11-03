@@ -774,6 +774,32 @@ Item {
     }
   }
 
+  // Opening the lid or resuming lights the panel with no input to wake the lock, so the
+  // face starts on its own then, like a key press. Timers stand still through a suspend,
+  // so the first tick after one sees the wall clock jump.
+  Timer {
+    id: faceSleepWatch
+    interval: 1000
+    repeat: true
+    running: root.lockRequested && root.faceConfigured
+    property double lastTickMs: 0
+    onRunningChanged: lastTickMs = Date.now()
+    onTriggered: {
+      var now = Date.now()
+      var slept = FingerprintModel.spannedSleep(now - lastTickMs, interval)
+      lastTickMs = now
+      if (slept) faceAfterWakeTimer.restart()
+    }
+  }
+
+  // The camera needs a moment after a resume or a display coming back.
+  Timer {
+    id: faceAfterWakeTimer
+    interval: 1000
+    repeat: false
+    onTriggered: if (root.lockRequested) root.startFace()
+  }
+
   Timer {
     id: fingerprintReachTimer
     interval: FingerprintModel.REACH_TIMEOUT_MS
@@ -920,7 +946,10 @@ Item {
       var screens = root.realScreenCount()
       if (screens > root.knownScreenCount) {
         root.resumeFingerprint()
-        if (root.lockRequested) root.armBlankTimer()
+        if (root.lockRequested) {
+          root.armBlankTimer()
+          faceAfterWakeTimer.restart()
+        }
       }
       root.knownScreenCount = screens
       root.requestSessionLock()
@@ -1032,7 +1061,7 @@ Item {
         face: root.faceConfigured,
         faceFailures: root.faceFailures,
         overlay: root.overlayStyle,
-        version: "0.2.0",
+        version: "0.3.0",
         fingerprintUnavailable: root.fingerprintUnavailable,
         authenticating: root.authenticating,
         lastEvent: root.lastEvent,
