@@ -1,0 +1,66 @@
+IRLUME SUPPORT REPORT
+Privacy: inspect before sharing. This report contains no frames, templates, credentials, usernames, raw camera serials, raw device paths, or journal prose.
+
+Report
+  schema: 1
+  irlume: 0.15.0
+  created UTC: 2026-11-02T06:01:38Z
+  privilege: user
+
+Platform and installation
+  platform: Arch-family
+  kernel: 7.2.8-5-omarchy-bore
+  install channel: arch_package
+  check platform_supported: pass
+  check install_channel: info
+  check tpm_present: pass
+  check secure_boot: warn
+  check daemon_reachable: pass
+
+Camera context
+  3277:0060 Rgb interface=0 speed=480Mbps generation=1 serial-present=true
+    transport: driver=uvcvideo backend=uvc-v4l2 speed=480Mbps controller=0000:00:14.0 usb=3-7
+    tokens: descriptor=d64a91fff6b24c98 qualification=beb6154eaefccc95
+    requested: 640x480 YUYV interval=1/30
+    accepted: 640x480 YUYV interval=1/30
+  3277:0060 Ir interface=2 speed=480Mbps generation=1 serial-present=true
+    transport: driver=uvcvideo backend=uvc-v4l2 speed=480Mbps controller=0000:00:14.0 usb=3-7
+    tokens: descriptor=d64a91fff6b24c98 qualification=beb6154eaefccc95
+    requested: 640x400 GREY interval=1/15
+    accepted: 640x400 GREY interval=1/15
+
+Capture schedule and qualification
+  current: sequential via sequential_default
+  qualification: inconclusive reason=dim_scene
+  contexts: runtime=888475aa2ebbae48 qualification=beb6154eaefccc95 degradation=none
+  authoritative rate shortfalls: unavailable
+  latest-attempt rate shortfalls
+    sequential: measured, no delivered-rate shortfalls
+    concurrent: measured, no delivered-rate shortfalls
+
+Recent typed events
+  #1 age=740397ms id=OperationId("0f1496bcf8ace2898e517415160c7d66") operation=CameraDiagnostics operation_finished outcome=Completed
+  #2 age=731165ms id=OperationId("9e9b5042bc655280f8a28b367c87e0a9") operation=CameraDiagnostics operation_finished outcome=Completed
+  #3 age=662086ms id=OperationId("a37af0ec0fb10b0feca11fc558aaec59") operation=CameraDiagnostics operation_finished outcome=Completed
+  #4 age=614758ms id=OperationId("3f1984723bca629cc85283fc33744a7e") operation=CameraDiagnostics operation_finished outcome=Completed
+  #5 age=592788ms id=OperationId("b4390352e119eadee7c5be982d52a504") operation=CameraDiagnostics operation_finished outcome=Completed
+  #6 age=564694ms id=OperationId("ccc9512715f53c5c6c2c429ebd3faf5f") operation=CameraDiagnostics operation_finished outcome=Completed
+  #7 age=218115ms id=OperationId("e7e99b0e78b72d720a834b97c0b151f8") operation=CameraDiagnostics operation_finished outcome=Completed
+  #8 age=185514ms id=OperationId("332cd6acade3d8e405e91fa6204e57b1") operation=CameraDiagnostics operation_finished outcome=Completed
+  #9 age=27169ms id=OperationId("e20e229b157cfad330af4e942e84f6e8") operation=Authentication qualification_changed state=Inconclusive reason=Some(DimScene)
+  #10 age=27169ms id=OperationId("e20e229b157cfad330af4e942e84f6e8") operation=Authentication capture_schedule_selected schedule=sequential source=sequential_default
+  #11 age=27169ms id=OperationId("e20e229b157cfad330af4e942e84f6e8") operation=Authentication lifecycle_changed role=Rgb generation=1
+  #12 age=27169ms id=OperationId("e20e229b157cfad330af4e942e84f6e8") operation=Authentication lifecycle_changed role=Ir generation=1
+  #13 age=19236ms id=OperationId("e20e229b157cfad330af4e942e84f6e8") operation=Authentication operation_finished outcome=Denied
+  #14 age=3996ms id=OperationId("6d7301da7015c3125f4db9eda606135b") operation=Status operation_finished outcome=Completed
+  events of other accounts: withheld, a report run as root lists them
+
+Unavailable sections
+  RecentEvents: NotAuthorized
+
+Privacy checklist
+  [x] no images or biometric templates
+  [x] no credentials or account/profile names
+  [x] no raw device paths, serials, emitter payloads, or journals
+  [!] this account's recent authentications: when each happened and its outcome
+SHA-256 (body): 1fbc55ab0da22e934ba6e42adab47b95a2d6068bf7071ed8df2fc6856d8d3005

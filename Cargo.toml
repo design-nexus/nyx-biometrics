@@ -6,6 +6,7 @@ members = [
   "crates/nyx-auth-hw",
   "crates/nyx-authctl",
   "crates/nyx-auth-helper",
+  "crates/nyx-auth-pam",
 ]
 
 [workspace.package]

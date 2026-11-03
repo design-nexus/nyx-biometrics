@@ -116,6 +116,18 @@ pub fn write_atomic(path: &Path, contents: &str, mode: u32) -> Result<(), FsErro
     result.map_err(io_err(path))
 }
 
+/// Remove a regular file, refusing links; missing is fine. The caller has already checked
+/// that the file is one of ours by its contents.
+pub fn remove_owned_or_foreign(path: &Path) -> Result<(), FsError> {
+    match fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_symlink() => Err(FsError::Symlink(path.display().to_string())),
+        Ok(m) if !m.is_file() => Err(FsError::NotRegular(path.display().to_string())),
+        Ok(_) => fs::remove_file(path).map_err(io_err(path)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(io_err(path)(e)),
+    }
+}
+
 /// Remove a file we own; missing is fine.
 pub fn remove_owned(path: &Path) -> Result<(), FsError> {
     match read_owned(path, u64::MAX) {

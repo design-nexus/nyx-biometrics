@@ -6,9 +6,15 @@
 //!   nyx-auth-helper keys-remove ID
 //!   nyx-auth-helper keys-rename ID primary|backup NAME
 //!   nyx-auth-helper keys-import-omarchy
+//!   nyx-auth-helper pam-apply SURFACE FINGERPRINT [migrate-omarchy]   (policy.toml on stdin)
+//!   nyx-auth-helper pam-confirm ID
+//!   nyx-auth-helper pam-restore [ID]
 //!   nyx-auth-helper --version
 //!
 //! The user is always PKEXEC_UID's; nothing in the arguments can name another account.
+//!
+//! `pam-rollback ID` is run by the systemd timer `pam-apply` arms, as root without pkexec.
+//! It can only put a snapshot back.
 
 use std::ffi::CStr;
 use std::io::{Read, Write};
@@ -21,6 +27,8 @@ use nyx_auth_hw::u2f::{Role, valid_user};
 
 const MAX_STDIN: u64 = 4096;
 
+mod pam_cmd;
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args == ["--version"] {
@@ -32,6 +40,13 @@ fn main() -> ExitCode {
         eprintln!("nyx-auth-helper must run through pkexec");
         return ExitCode::from(126);
     }
+    if let [verb, id] = args.as_slice()
+        && verb == "pam-rollback"
+    {
+        let result = pam_cmd::rollback(id);
+        log("root", "pam-rollback", &result);
+        return finish(result);
+    }
     let user = match caller() {
         Ok(u) => u,
         Err(e) => {
@@ -42,6 +57,10 @@ fn main() -> ExitCode {
     let verb = args.first().map(String::as_str).unwrap_or("");
     let result = run(&user, &args);
     log(&user, verb, &result);
+    finish(result)
+}
+
+fn finish(result: Result<String, String>) -> ExitCode {
     match result {
         Ok(msg) => {
             if !msg.is_empty() {
@@ -98,6 +117,19 @@ fn run(user: &str, args: &[String]) -> Result<String, String> {
         ["keys-remove", id] => store.remove(user, id).map(|_| String::new()).map_err(|e| e.to_string()),
         ["keys-rename", id, r, name] => store.rename(user, id, name, role(r)?).map(|_| String::new()).map_err(|e| e.to_string()),
         ["keys-import-omarchy"] => store.import_omarchy(user, &today()).map(|n| n.to_string()).map_err(|e| e.to_string()),
+        ["pam-apply", surface, fp, rest @ ..] => {
+            let migrate = match rest {
+                [] => false,
+                ["migrate-omarchy"] => true,
+                _ => return Err("unknown option".into()),
+            };
+            let mut policy = String::new();
+            std::io::stdin().take(64 * 1024).read_to_string(&mut policy).map_err(|e| e.to_string())?;
+            pam_cmd::apply(user, surface, fp, migrate, &policy)
+        }
+        ["pam-confirm", id] => pam_cmd::confirm(id),
+        ["pam-restore"] => pam_cmd::restore(None),
+        ["pam-restore", id] => pam_cmd::restore(Some(id)),
         _ => Err("unknown command".into()),
     }
 }
@@ -105,7 +137,14 @@ fn run(user: &str, args: &[String]) -> Result<String, String> {
 /// One JSON line per request: who, what, whether it worked. Never key material.
 fn log(user: &str, verb: &str, result: &Result<String, String>) {
     let verb = match verb {
-        "keys-add" | "keys-remove" | "keys-rename" | "keys-import-omarchy" => verb,
+        "keys-add"
+        | "keys-remove"
+        | "keys-rename"
+        | "keys-import-omarchy"
+        | "pam-apply"
+        | "pam-confirm"
+        | "pam-restore"
+        | "pam-rollback" => verb,
         _ => "unknown",
     };
     let line = serde_json::json!({

@@ -281,7 +281,10 @@ name = "nyx-auth-helper"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "nyx-auth-core",
  "nyx-auth-hw",
+ "nyx-auth-pam",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror",
@@ -302,6 +305,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nyx-auth-pam"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "nyx-auth-core",
+ "nyx-auth-hw",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "nyx-auth-proto"
 version = "0.1.0"
 dependencies = [
@@ -319,6 +334,7 @@ dependencies = [
  "nyx-auth-core",
  "nyx-auth-helper",
  "nyx-auth-hw",
+ "nyx-auth-pam",
  "serde_json",
 ]
 

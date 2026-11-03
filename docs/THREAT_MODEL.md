@@ -47,7 +47,12 @@ where we can't.
 - *Threat*: the screen unlocks because the person (or someone resembling them) happens to
   be in front of it; a face check runs without the person meaning to authenticate.
 - *Mitigations*: face runs only after an explicit request (a wake, a key press, a prompt
-  that names its purpose), with a short timeout. The camera is closed between attempts.
+  that names its purpose), with a short timeout.
+- *Owner choice, hands-free sudo and polkit*: Irlume normally asks for a typed `yes` before
+  scanning at sudo and polkit. An owner can waive that (`irlume auth consent hands-free`,
+  chosen on Ken's G16). Then any program running as the user can get root by running
+  `sudo` while the user is in view; remote sessions and a closed lid stay excluded. The
+  Phase 4 overlay must show visibly whenever a scan runs, so it can't happen unnoticed. The camera is closed between attempts.
   Hands-free unlock is off by default and separate. A visible overlay shows whenever a
   face check runs.
 
@@ -73,8 +78,14 @@ where we can't.
 - *Threat*: `sudo` over SSH waits for a fingerprint or key touch at the laptop (or worse,
   succeeds because someone at the laptop touched it).
 - *Mitigations*: every non-password module is behind `nyx-auth-gate`, which skips them for
-  remote sessions and a closed lid. `Method::local_only` marks this in code; the generator
-  refuses to emit a non-password module without the gate.
+  remote sessions, sessions it can't identify and a closed lid. `Method::local_only` marks
+  this in code; the checker refuses a non-password module without the gate, and the helper
+  refuses to apply while the gate isn't installed. Irlume also stands down for remote
+  transactions on its own. Required methods (password plus key) have no gate: remote use
+  fails closed.
+- *Residual*: a `sudo` in a terminal multiplexer started locally and later attached over
+  SSH looks local. The socket-activated polkit helper has no session of its own, so for
+  administrator prompts only the user's display session is checked.
 
 ### Malicious local process
 
