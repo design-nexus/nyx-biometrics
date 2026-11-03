@@ -328,8 +328,10 @@ Item {
       radius: root.cornerRadius
       anchors.centerIn: parent
       anchors.horizontalCenterOffset: root.shakeOffset
-      color: root.background
-      borderSpec: root.borderSpec
+      // The face scan brings its own see-through card, as the terminal's sign-in does.
+      readonly property bool faceCard: root.faceMode && root.overlayStyle !== "edge"
+      color: faceCard ? "transparent" : root.background
+      borderSpec: faceCard ? Border.none() : root.borderSpec
       padding: root.contentMargin
 
       MouseArea { anchors.fill: parent; onClicked: root.refocus() }
@@ -355,18 +357,19 @@ Item {
       // instead, so the card keeps a small face icon.
       AuthOverlay {
         anchors.fill: parent
-        visible: root.faceMode && root.overlayStyle !== "edge"
+        visible: card.faceCard
         style: root.overlayStyle === "minimal" ? "circular" : root.overlayStyle
+        card: true
         method: "face"
         phase: "scanning"
         message: root.currentSupplementary
         intensity: root.overlayIntensity
         animate: root.overlayAnimate
-        accent: root.accent
-        surface: root.background
-        text: root.foreground
-        dim: Util.alpha(root.foreground, 0.5)
-        bad: Commons.Color.polkit.textError
+        accent: Commons.Color.lock.borderActive
+        surface: Commons.Color.lock.background
+        text: Commons.Color.lock.text
+        dim: Commons.Color.lock.placeholder
+        bad: Commons.Color.lock.textError
       }
 
       // Fingerprint mode shows just the sensor icon, centered and alone \u2014 no
