@@ -237,9 +237,21 @@ session bus. Methods: `Authenticate(Request) -> Reply`, `Check(action)`, `Revoke
 - **Caller identity** comes from the connection: uid, pidfd and executable path, checked
   the way `nyx-passwordsd` checks its peers. Each known caller has an action prefix
   (`io.github.design_nexus.nyx.passwords.` for Passwords); requests outside it are refused.
-- **Purpose** is one short plain-text sentence shown next to the caller's name and icon.
+- **Purpose** is one short plain-text sentence. The prompt is polkit's `app-action`
+  (`auth_self`) for the broker's own process, so the system face card answers; polkit
+  lets only root pass a message of its own, so it shows the action's fixed text and the
+  app says what it's for in its own window.
+- **Policy**: the surface's policy (`vault` or `app-action`) must be one a single prompt
+  can meet; one that wants two methods together is refused (`Unavailable`).
+- **Started by D-Bus** on first use (`~/.local/share/dbus-1/services`), gone after ten
+  quiet minutes with no grant. One prompt at a time (`Busy`); six requests a minute per
+  caller. `Methods()` reports the `app-action` policy's methods (the broker can't see the
+  hardware) and the password.
+- **Clients connect with `nyx_auth_proto::connect`**, which checks the bus name's owner is
+  this user's `nyx-authd` from where the suite installs it and talks to that connection
+  only. Without a verified broker they ask polkit directly.
 - **Grants** are bound to caller and action, last at most 5 minutes (0 means once), and end
-  on lock, sleep and logout.
+  on any login1 session `Lock`, on `PrepareForSleep`, and when the broker exits.
 - **No approve method.** Only a successful authentication at the broker's prompt grants,
   so an agent can't approve its own request.
 - **Audit log**: one JSON line per request in `$XDG_STATE_HOME/nyx/auth/audit.jsonl`
@@ -276,9 +288,10 @@ Vaultwarden and the Bitwarden data model stay as they are. Three separate things
    broker at the `vault` policy. This gates access in the daemon; it isn't separate
    encryption per item.
 
-Passkeys stay in Bitwarden's `fido2Credentials` format. When a site asks for user
-verification, the daemon gets a fresh broker authentication instead of always reporting
-it. Hardware-bound passkeys stay on the hardware key and go through the browser.
+Passkeys stay in Bitwarden's `fido2Credentials` format. When a site requires user
+verification, the daemon gets a fresh broker authentication (`passkey-verify`) before
+signing or making a passkey; otherwise an unlocked vault counts, as in the official
+clients. Hardware-bound passkeys stay on the hardware key and go through the browser.
 
 ## Privileged helper (`nyx-auth-helper`)
 
