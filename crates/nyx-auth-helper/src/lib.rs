@@ -6,9 +6,10 @@
 
 pub mod fsx;
 pub mod keys;
+pub mod login_theme;
 pub mod pam;
 
-pub const HELPER_VERSION: u32 = 5;
+pub const HELPER_VERSION: u32 = 6;
 pub const INSTALL_PATH: &str = "/usr/local/lib/nyx-biometrics/nyx-auth-helper";
 pub const POLICY_FILE: &str = "/usr/share/polkit-1/actions/io.github.design_nexus.nyx.auth.policy";
 pub const POLICY: &str = include_str!("../data/io.github.design_nexus.nyx.auth.policy");
@@ -45,7 +46,16 @@ mod tests {
 
     #[test]
     fn policy_has_one_action_per_verb() {
-        for verb in ["keys-add", "keys-remove", "keys-rename", "keys-import-omarchy", "pam-apply", "pam-confirm", "pam-restore"] {
+        for verb in [
+            "keys-add",
+            "keys-remove",
+            "keys-rename",
+            "keys-import-omarchy",
+            "pam-apply",
+            "pam-confirm",
+            "pam-restore",
+            "login-theme",
+        ] {
             assert!(
                 super::POLICY.contains(&format!("<annotate key=\"org.freedesktop.policykit.exec.argv1\">{verb}</annotate>")),
                 "{verb}"

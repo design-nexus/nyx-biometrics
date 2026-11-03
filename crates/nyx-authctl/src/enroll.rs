@@ -204,6 +204,7 @@ pub fn helper_status() -> ExitCode {
         && Path::new(nyx_auth_pam::generate::GATE).is_file()
         && Path::new(nyx_auth_pam::generate::NOTIFY).is_file()
         && Path::new(KEYD).is_file()
+        && nyx_auth_helper::login_theme::installed(&nyx_auth_helper::pam::Root::system())
         && KEYD_FILES.iter().all(|(path, text)| std::fs::read_to_string(path).is_ok_and(|t| t == *text));
     match (installed, policy_ok) {
         (Some(v), true) if v == HELPER_VERSION => {
@@ -251,6 +252,7 @@ pub fn helper_install() -> ExitCode {
             std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o644))?;
             std::fs::rename(&tmp, path)?;
         }
+        nyx_auth_helper::login_theme::install(&nyx_auth_helper::pam::Root::system())?;
         let ptmp = Path::new(POLICY_FILE).with_extension("policy.new");
         std::fs::write(&ptmp, POLICY)?;
         std::fs::set_permissions(&ptmp, std::os::unix::fs::PermissionsExt::from_mode(0o644))?;
@@ -261,7 +263,7 @@ pub fn helper_install() -> ExitCode {
             let _ = Command::new("/usr/bin/systemctl").arg("daemon-reload").status();
             let _ = Command::new("/usr/bin/systemctl").args(["enable", "--now", "nyx-auth-keyd.socket"]).status();
             println!(
-                "Installed {INSTALL_PATH}, {}, {}, {KEYD}, the key service and {POLICY_FILE}.",
+                "Installed {INSTALL_PATH}, {}, {}, {KEYD}, the key service, the login screen theme and {POLICY_FILE}.",
                 nyx_auth_pam::generate::GATE,
                 nyx_auth_pam::generate::NOTIFY
             );

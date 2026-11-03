@@ -46,6 +46,8 @@ const USAGE: &str = "Usage: nyx-authctl <command>
   pam test SURFACE [--face]       Sign in once against a surface's current setup
   pam restore [ID]                Put back the files from before a change (newest by default)
 
+  login-theme on|off|status       Use the Nyx login screen (Halo for the face) or
+                                  Omarchy's own
   helper status                   Whether the root helper is installed and current
   helper install                  Install the root helper and its polkit actions (run with sudo)
 ";
@@ -77,6 +79,9 @@ fn main() -> ExitCode {
         ["pam", "test", rest @ ..] => pam::test(rest),
         ["pam", "restore"] => pam::restore(None),
         ["pam", "restore", id] => pam::restore(Some(id)),
+        ["login-theme", "on"] => enroll::helper(&["login-theme", "on"], None),
+        ["login-theme", "off"] => enroll::helper(&["login-theme", "off"], None),
+        ["login-theme", "status"] => login_theme_status(),
         ["helper", "status"] => enroll::helper_status(),
         ["helper", "install"] => enroll::helper_install(),
         ["help" | "--help" | "-h"] => {
@@ -221,5 +226,16 @@ fn policy_check() -> ExitCode {
 
 fn policy_recommend() -> ExitCode {
     print!("{}", PolicySet::recommended(&report().inventory()).to_toml());
+    ExitCode::SUCCESS
+}
+
+fn login_theme_status() -> ExitCode {
+    use nyx_auth_helper::login_theme;
+    let root = nyx_auth_helper::pam::Root::system();
+    match (login_theme::installed(&root), login_theme::chosen(&root)) {
+        (true, true) => println!("On: the login screen shows Halo for the face."),
+        (true, false) => println!("Off: Omarchy's login screen. Turn on with: nyx-authctl login-theme on"),
+        (false, _) => println!("Not installed. Run: sudo nyx-authctl helper install"),
+    }
     ExitCode::SUCCESS
 }
