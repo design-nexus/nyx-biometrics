@@ -1,0 +1,202 @@
+use std::ffi::CStr;
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+use nyx_auth_core::{PolicySet, Surface};
+use nyx_auth_hw::SystemRunner;
+use nyx_auth_hw::report::{Paths, Report, Status};
+
+mod enroll;
+
+const USAGE: &str = "Usage: nyx-authctl <command>
+
+  doctor [--json]       What sign-in hardware this computer has and what's set up
+  policy show           The current policy, by surface
+  policy check          Check the policy against this computer's hardware
+  policy recommend      The policy setup would suggest for this hardware
+
+  keys list                       Registered security keys
+  keys add NAME [--backup] [--pin]
+                                  Register the plugged-in key (touch it when it blinks).
+                                  --pin also asks for its PIN every time it's used
+  keys rename ID NAME [--backup]  Rename a key or change its role
+  keys remove ID                  Stop accepting a key
+  keys import-omarchy             Use the keys Omarchy's FIDO2 setup registered
+
+  finger list                     Enrolled fingers
+  finger enroll [FINGER]          Enroll a finger (default right-index-finger)
+  finger remove FINGER            Delete an enrolled finger
+
+  face enroll                     Enroll your face with the backend for this camera
+  face manage                     Open the backend's own manager
+
+  helper status                   Whether the root helper is installed and current
+  helper install                  Install the root helper and its polkit actions (run with sudo)
+";
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    match args.as_slice() {
+        ["doctor"] => doctor(false),
+        ["doctor", "--json"] => doctor(true),
+        ["policy", "show"] => policy_show(),
+        ["policy", "check"] => policy_check(),
+        ["policy", "recommend"] => policy_recommend(),
+        ["keys", "list"] => enroll::keys_list(&user()),
+        ["keys", "add", rest @ ..] => enroll::keys_add(rest),
+        ["keys", "rename", id, rest @ ..] => enroll::keys_rename(id, rest),
+        ["keys", "remove", id] => enroll::helper(&["keys-remove", id], None),
+        ["keys", "import-omarchy"] => enroll::helper(&["keys-import-omarchy"], None),
+        ["finger", "list"] => enroll::finger_list(&user()),
+        ["finger", "enroll"] => enroll::finger_enroll(&user(), "right-index-finger"),
+        ["finger", "enroll", finger] => enroll::finger_enroll(&user(), finger),
+        ["finger", "remove", finger] => enroll::finger_remove(&user(), finger),
+        ["face", "enroll"] => enroll::face(&report(), false),
+        ["face", "manage"] => enroll::face(&report(), true),
+        ["helper", "status"] => enroll::helper_status(),
+        ["helper", "install"] => enroll::helper_install(),
+        ["help" | "--help" | "-h"] => {
+            print!("{USAGE}");
+            ExitCode::SUCCESS
+        }
+        _ => {
+            eprint!("{USAGE}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// The calling user's name from the password database, not the environment.
+fn user() -> String {
+    // SAFETY: getpwuid returns a pointer into static storage or null; it's read before any
+    // other call that could overwrite it.
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() {
+            return String::new();
+        }
+        CStr::from_ptr((*pw).pw_name).to_string_lossy().into_owned()
+    }
+}
+
+fn report() -> Report {
+    Report::collect(&SystemRunner, &Paths::system(), &user())
+}
+
+fn doctor(json: bool) -> ExitCode {
+    let report = report();
+    let findings = report.findings();
+    if json {
+        let doc = serde_json::json!({ "report": report, "findings": findings, "inventory": report.inventory() });
+        println!("{}", serde_json::to_string_pretty(&doc).expect("report serializes"));
+        return ExitCode::SUCCESS;
+    }
+    let mut area = "";
+    for f in &findings {
+        if f.area != area {
+            area = f.area;
+            println!("\n{}", heading(area));
+        }
+        let mark = match f.status {
+            Status::Ok => "ok  ",
+            Status::Info => "    ",
+            Status::Warn => "warn",
+            Status::Missing => "--  ",
+            Status::Error => "err ",
+        };
+        println!("  {mark} {}", f.message);
+    }
+    let inv = report.inventory();
+    println!("\nUsable now");
+    println!("  Password");
+    if let Some(face) = inv.face {
+        println!("  Face ({:?}{})", face.camera, if face.liveness { ", with liveness" } else { "" });
+    }
+    if inv.fingerprint {
+        println!("  Fingerprint");
+    }
+    for k in &inv.keys {
+        println!("  Security key “{}”{}", k.name, if k.verification { " (PIN)" } else { "" });
+    }
+    ExitCode::SUCCESS
+}
+
+fn heading(area: &str) -> &'static str {
+    match area {
+        "face" => "Face",
+        "fingerprint" => "Fingerprint",
+        "security-key" => "Security keys",
+        "tpm" => "TPM",
+        _ => "Other",
+    }
+}
+
+fn policy_path() -> PathBuf {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+        .unwrap_or_else(|| PathBuf::from("/nonexistent"));
+    base.join("nyx/auth/policy.toml")
+}
+
+fn load_policy() -> Result<PolicySet, String> {
+    match std::fs::read_to_string(policy_path()) {
+        Ok(text) => PolicySet::from_toml(&text).map_err(|e| format!("{}: {e}", policy_path().display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(PolicySet::default()),
+        Err(e) => Err(format!("{}: {e}", policy_path().display())),
+    }
+}
+
+fn policy_show() -> ExitCode {
+    match load_policy() {
+        Ok(p) => {
+            print!("{}", p.to_toml());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn policy_check() -> ExitCode {
+    let policy = match load_policy() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let inv = report().inventory();
+    let mut ok = true;
+    for s in Surface::ALL {
+        match policy.get(s).plan(s, &inv) {
+            Ok(plan) => {
+                let alts: Vec<String> = plan
+                    .alternatives
+                    .iter()
+                    .map(|a| a.iter().map(|m| m.kind().label()).collect::<Vec<_>>().join(" + "))
+                    .collect();
+                println!("ok    {}: {}", s.label(), alts.join(", "));
+                for k in plan.unavailable {
+                    println!("        {} isn't available right now", k.label());
+                }
+            }
+            Err(errors) => {
+                ok = false;
+                println!("error {}:", s.label());
+                for e in errors {
+                    println!("        {e}");
+                }
+            }
+        }
+    }
+    if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+}
+
+fn policy_recommend() -> ExitCode {
+    print!("{}", PolicySet::recommended(&report().inventory()).to_toml());
+    ExitCode::SUCCESS
+}

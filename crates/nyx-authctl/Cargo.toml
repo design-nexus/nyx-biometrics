@@ -1,0 +1,15 @@
+[package]
+name = "nyx-authctl"
+description = "Command line for Nyx Biometrics: diagnostics, policy and enrollment"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+nyx-auth-core = { path = "../nyx-auth-core" }
+nyx-auth-hw = { path = "../nyx-auth-hw" }
+nyx-auth-helper = { path = "../nyx-auth-helper" }
+serde_json = "1"
+libc = "0.2"
