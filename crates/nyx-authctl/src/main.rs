@@ -48,6 +48,8 @@ const USAGE: &str = "Usage: nyx-authctl <command>
 
   login-theme on|off|status       Use the Nyx login screen (Halo for the face) or
                                   Omarchy's own
+  broker test                     Ask the sign-in broker (nyx-authd) to confirm it's you,
+                                  as a Nyx app would. Grants nothing
   helper status                   Whether the root helper is installed and current
   helper install                  Install the root helper and its polkit actions (run with sudo)
 ";
@@ -82,6 +84,7 @@ fn main() -> ExitCode {
         ["login-theme", "on"] => enroll::helper(&["login-theme", "on"], None),
         ["login-theme", "off"] => enroll::helper(&["login-theme", "off"], None),
         ["login-theme", "status"] => login_theme_status(),
+        ["broker", "test"] => broker_test(),
         ["helper", "status"] => enroll::helper_status(),
         ["helper", "install"] => enroll::helper_install(),
         ["help" | "--help" | "-h"] => {
@@ -238,4 +241,34 @@ fn login_theme_status() -> ExitCode {
         (false, _) => println!("Not installed. Run: sudo nyx-authctl helper install"),
     }
     ExitCode::SUCCESS
+}
+
+/// One request through the broker, as Nyx apps make them, to check the whole path.
+fn broker_test() -> ExitCode {
+    use nyx_auth_proto::{AuthProxyBlocking, Outcome, Request, Surface};
+    let run = || -> zbus::Result<nyx_auth_proto::Reply> {
+        let conn = zbus::blocking::Connection::session()?;
+        let proxy = AuthProxyBlocking::new(&conn)?;
+        proxy.authenticate(Request {
+            action: "io.github.design_nexus.nyx.authctl.test".into(),
+            purpose: "Test the sign-in broker (grants nothing)".into(),
+            surface: Surface::AppAction,
+            grant_secs: 0,
+        })
+    };
+    println!("Confirm it's you when the prompt appears.");
+    match run() {
+        Ok(r) if r.outcome == Outcome::Granted => {
+            println!("Granted.");
+            ExitCode::SUCCESS
+        }
+        Ok(r) => {
+            println!("Not granted: {:?}.", r.outcome);
+            ExitCode::FAILURE
+        }
+        Err(e) => {
+            eprintln!("The broker didn't answer: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }
