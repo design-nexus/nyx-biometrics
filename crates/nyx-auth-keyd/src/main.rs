@@ -148,10 +148,9 @@ mod tests {
     fn home_of_this_user() {
         // SAFETY: getuid has no preconditions.
         let uid = unsafe { libc::getuid() };
+        // From the password database, not $HOME (which a container or the caller may set).
         let home = super::home_of(uid).expect("this user has a home");
         assert!(home.is_absolute(), "{}", home.display());
-        if let Some(env) = std::env::var_os("HOME").filter(|h| !h.is_empty()) {
-            assert_eq!(home, std::path::PathBuf::from(env));
-        }
+        assert!(super::home_of(u32::MAX - 1).is_none(), "no such user");
     }
 }
