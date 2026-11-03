@@ -9,6 +9,7 @@
 //!   nyx-auth-helper pam-apply SURFACE FINGERPRINT [migrate-omarchy]   (policy.toml on stdin)
 //!   nyx-auth-helper pam-confirm ID
 //!   nyx-auth-helper pam-restore [ID]
+//!   nyx-auth-helper login-theme on|off
 //!   nyx-auth-helper --version
 //!
 //! The user is always PKEXEC_UID's; nothing in the arguments can name another account.
@@ -22,6 +23,8 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::process::ExitCode;
 
 use nyx_auth_helper::keys::Store;
+use nyx_auth_helper::login_theme;
+use nyx_auth_helper::pam::Root;
 use nyx_auth_helper::{HELPER_VERSION, LOG_FILE, fsx, today};
 use nyx_auth_hw::u2f::{Role, valid_user};
 
@@ -130,6 +133,8 @@ fn run(user: &str, args: &[String]) -> Result<String, String> {
         ["pam-confirm", id] => pam_cmd::confirm(id),
         ["pam-restore"] => pam_cmd::restore(None),
         ["pam-restore", id] => pam_cmd::restore(Some(id)),
+        ["login-theme", "on"] => login_theme::set(&Root::system(), true),
+        ["login-theme", "off"] => login_theme::set(&Root::system(), false),
         _ => Err("unknown command".into()),
     }
 }
@@ -144,7 +149,8 @@ fn log(user: &str, verb: &str, result: &Result<String, String>) {
         | "pam-apply"
         | "pam-confirm"
         | "pam-restore"
-        | "pam-rollback" => verb,
+        | "pam-rollback"
+        | "login-theme" => verb,
         _ => "unknown",
     };
     let line = serde_json::json!({

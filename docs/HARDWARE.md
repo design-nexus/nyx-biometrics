@@ -63,6 +63,8 @@ enough). Gaze is only needed to test the colour camera on its own.
 | sudo face hands-free (no `yes`), about 1.5 s | verified 2026-11-02 |
 | sudo stack with the scan overlay cue, applied and face-tested through real sudo | verified 2026-11-02 |
 | sudo scan overlay (Halo) shows over the desktop and clears after the scan | verified 2026-11-02 |
+| SDDM face sign-in through the real `sddm` stack (Irlume on demand), applied and face-tested | verified 2026-11-02 |
+| Nyx login screen theme renders in `sddm-greeter --test-mode` (Halo at rest) | verified 2026-11-02 |
 | Lock screen face starts on its own when the lid opens after a suspend (no input) | verified 2026-11-02 |
 | Passwords face unlock from Glimpse's locked row, through keyd and the Nyx dialog | verified 2026-11-02 |
 | sudo face skipped over SSH | pending |

@@ -44,7 +44,7 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 | **Gate**: sudo (face, hands-free) | done, verified on the G16 |
 | **Gate**: polkit-1 (face, hands-free) | done, verified on the G16 |
 | **Gate**: lock screen face service (`omarchy-lock-face`) | done, verified on the G16 |
-| **Gate**: SDDM | skipped on the G16: autologin is on, so the login screen only appears after logging out |
+| **Gate**: SDDM | live on the G16: face at the login screen after logging out (empty password, Enter); autologin at boot unchanged |
 
 ## Phase 4: native interface
 
@@ -55,7 +55,7 @@ Work stops for Ken's approval at each gate. Nothing is merged automatically.
 | `design-nexus.auth-lock` from `ken.lock` (face on wake) | done, in use on the G16 |
 | `design-nexus.auth-polkit` with the scan overlay | done, in use on the G16 |
 | `design-nexus.auth-prompt` for app requests and sudo status | planned |
-| SDDM theme | planned |
+| SDDM theme | done: `nyx-biometrics`, Omarchy's screen with Halo; `nyx-authctl login-theme on\|off` |
 | `nyx-authd` broker | planned |
 | Nyx Settings: Sign-in & Security page, Users-page link | done (review: nyx-settings#1), installed |
 | Reusable setup flow | planned |
