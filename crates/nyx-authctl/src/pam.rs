@@ -131,19 +131,34 @@ fn service(surface: Surface) -> &'static str {
         Surface::Sudo => "sudo",
         Surface::Polkit => "polkit-1",
         Surface::Login => "sddm",
-        _ => "nyx-lock-password",
+        _ => "omarchy-lock-face",
     }
 }
 
-/// One PAM conversation that only accepts the face: the first prompt (Irlume's "use your
-/// face?") is answered "yes"; any later prompt means the face didn't do it.
+/// One PAM conversation that only accepts the face. The first prompt selects one face
+/// attempt: an empty answer where Irlume runs on demand (login, lock screen), "yes" at its
+/// consent prompt (sudo, polkit). Any later prompt means the face didn't do it.
 fn face_test(surface: Surface) -> Result<(), String> {
+    // Irlume only waives its consent prompt for the real sudo binary, so test through it.
+    // With no input there's no password to fall back on: only the face can pass.
+    if surface == Surface::Sudo {
+        println!("Look at the camera.");
+        let _ = Command::new(SUDO).arg("-k").status();
+        let ok = Command::new(SUDO)
+            .args(["-S", "-p", "", "/usr/bin/true"])
+            .stdin(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        return if ok { Ok(()) } else { Err("the face didn't pass".into()) };
+    }
+    let select = if matches!(surface, Surface::Login | Surface::LockScreen) { "" } else { "yes" };
     let mut asked = false;
     println!("Look at the camera.");
     pamtest::authenticate(service(surface), &crate::user(), |p| match p {
         Prompt::Secret(_) | Prompt::Visible(_) if !asked => {
             asked = true;
-            Some("yes".into())
+            Some(select.into())
         }
         Prompt::Secret(_) | Prompt::Visible(_) => None,
         Prompt::Info(t) => {
@@ -155,10 +170,21 @@ fn face_test(surface: Surface) -> Result<(), String> {
 
 /// Authenticate against the changed service, as it will be used.
 fn live_test(surface: Surface, face: bool) -> Result<(), String> {
-    if face {
-        return face_test(surface);
+    // The lock screen's only Nyx service is the face; Omarchy owns its password service.
+    // A glance away during the first attempt shouldn't throw the change away, so try twice.
+    if face || surface == Surface::LockScreen {
+        return face_test(surface).or_else(|_| {
+            println!("Not yet. Once more:");
+            face_test(surface)
+        });
     }
     match surface {
+        // A real administrator prompt: the polkit agent, the socket-activated helper and the
+        // same PAM stack as every other prompt.
+        Surface::Polkit => {
+            let ok = Command::new("/usr/bin/pkexec").arg("/usr/bin/true").status().map(|s| s.success()).unwrap_or(false);
+            if ok { Ok(()) } else { Err("the administrator prompt didn't accept".into()) }
+        }
         Surface::Sudo => {
             let _ = Command::new(SUDO).arg("-k").status();
             // With Irlume's consent prompt on, its "use your face?" question arrives as sudo's
@@ -220,7 +246,7 @@ pub fn apply(args: &[&str]) -> ExitCode {
     };
     println!("\nApplied (snapshot {id}). Now sign in once with the new setup.");
     if surface == Surface::Polkit && !flags.face {
-        println!("To use your face: type  yes  in the password field and look at the camera.");
+        println!("Look at the camera when the administrator prompt appears (type yes first if it asks).");
     }
     match live_test(surface, flags.face) {
         Ok(()) => {}

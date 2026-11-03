@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Nyx Biometrics</vendor>
+  <vendor_url>https://github.com/design-nexus/nyx-biometrics</vendor_url>
+
+  <action id="io.github.design_nexus.nyx.auth.unlock">
+    <description>Unlock with your face or another sign-in method</description>
+    <message>Confirm it's you to unlock Nyx Passwords</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+  </action>
+
+  <action id="io.github.design_nexus.nyx.auth.enroll-unlock">
+    <description>Turn on unlocking with your face or another sign-in method</description>
+    <message>Confirm it's you to turn on unlocking Nyx Passwords with your face</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+  </action>
+
+  <action id="io.github.design_nexus.nyx.auth.app-action">
+    <description>Confirm a sensitive action in a Nyx app</description>
+    <message>Confirm it's you to allow this</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

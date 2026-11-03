@@ -1,0 +1,11 @@
+[Unit]
+Description=Nyx Biometrics key service
+
+[Socket]
+ListenStream=/run/nyx-biometrics/keyd.sock
+SocketMode=0666
+Accept=yes
+MaxConnections=8
+
+[Install]
+WantedBy=sockets.target

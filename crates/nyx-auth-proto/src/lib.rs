@@ -6,6 +6,8 @@
 //! There is no method to approve a request: only a successful authentication at the
 //! prompt can, so a program can't approve what it asked for.
 
+pub mod keyd;
+
 use serde::{Deserialize, Serialize};
 use zvariant::Type;
 

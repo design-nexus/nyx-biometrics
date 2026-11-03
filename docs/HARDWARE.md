@@ -57,10 +57,15 @@ enough). Gaze is only needed to test the colour camera on its own.
 | Phone-screen photo refused | pending |
 | `nyx-authctl doctor` reports face as one factor (IR with liveness) | pending |
 | Gaze on `/dev/video0` reports presence only | pending |
-| Lock screen face unlock, explicit wake only | pending (Phase 4) |
+| Lock screen face unlock on wake (`design-nexus.auth-lock`, `omarchy-lock-face`) | verified 2026-11-02 |
+| Halo overlay on the lock screen: at rest, scanning, success before unlock | verified 2026-11-02 |
 | sudo face in a local terminal, IR-only, dark room, about 2 s | verified 2026-11-02 |
 | sudo face hands-free (no `yes`), about 1.5 s | verified 2026-11-02 |
+| sudo stack with the scan overlay cue, applied and face-tested through real sudo | verified 2026-11-02 |
+| sudo scan overlay (Halo) shows over the desktop and clears after the scan | verified 2026-11-02 |
 | sudo face skipped over SSH | pending |
+| Administrator prompts (polkit) approved by face, hands-free | verified 2026-11-02 |
+| Same through the Nyx administrator prompt (`design-nexus.auth-polkit`), with the scan overlay | verified 2026-11-02 |
 
 ## TEC ESS TE-FPA-CA1 fingerprint reader
 

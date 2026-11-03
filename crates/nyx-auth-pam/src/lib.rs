@@ -10,6 +10,7 @@ pub mod check;
 pub mod diff;
 pub mod gate;
 pub mod generate;
+pub mod notify;
 pub mod pamtest;
 pub mod parse;
 

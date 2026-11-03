@@ -31,6 +31,8 @@ unsafe extern "C" {
     fn pam_start(service: *const c_char, user: *const c_char, conv: *const PamConv, handle: *mut *mut c_void) -> c_int;
     fn pam_authenticate(handle: *mut c_void, flags: c_int) -> c_int;
     fn pam_end(handle: *mut c_void, status: c_int) -> c_int;
+    fn pam_open_session(handle: *mut c_void, flags: c_int) -> c_int;
+    fn pam_close_session(handle: *mut c_void, flags: c_int) -> c_int;
     fn pam_strerror(handle: *mut c_void, errnum: c_int) -> *const c_char;
 }
 
@@ -83,7 +85,20 @@ extern "C" fn conv(n: c_int, msgs: *mut *const PamMessage, resp: *mut *mut PamRe
 }
 
 /// `Ok` when PAM accepted; otherwise PAM's reason.
-pub fn authenticate(service: &str, user: &str, mut responder: impl FnMut(Prompt) -> Option<String>) -> Result<(), String> {
+pub fn authenticate(service: &str, user: &str, responder: impl FnMut(Prompt) -> Option<String>) -> Result<(), String> {
+    run(service, user, responder, false)
+}
+
+/// As `authenticate`, then open and close a session, as sudo does after a sign-in.
+pub fn authenticate_and_open_session(
+    service: &str,
+    user: &str,
+    responder: impl FnMut(Prompt) -> Option<String>,
+) -> Result<(), String> {
+    run(service, user, responder, true)
+}
+
+fn run(service: &str, user: &str, mut responder: impl FnMut(Prompt) -> Option<String>, session: bool) -> Result<(), String> {
     let service = CString::new(service).map_err(|_| "bad service")?;
     let user = CString::new(user).map_err(|_| "bad user")?;
     let mut dynamic: &mut Responder = &mut responder;
@@ -95,7 +110,13 @@ pub fn authenticate(service: &str, user: &str, mut responder: impl FnMut(Prompt)
         if rc != PAM_SUCCESS {
             return Err(format!("pam_start failed ({rc})"));
         }
-        let rc = pam_authenticate(handle, 0);
+        let mut rc = pam_authenticate(handle, 0);
+        if rc == PAM_SUCCESS && session {
+            rc = pam_open_session(handle, 0);
+            if rc == PAM_SUCCESS {
+                pam_close_session(handle, 0);
+            }
+        }
         let reason = CStr::from_ptr(pam_strerror(handle, rc)).to_string_lossy().into_owned();
         pam_end(handle, rc);
         if rc == PAM_SUCCESS { Ok(()) } else { Err(reason) }

@@ -252,12 +252,20 @@ Vaultwarden and the Bitwarden data model stay as they are. Three separate things
 
 1. **Unlocking the local vault** (decrypting the user key on this computer):
    - *Password*: unchanged.
-   - *Face or fingerprint*: the user key is wrapped (AES-256-GCM, via `bitwarden-crypto`)
-     under a random wrapping key. `nyx-auth-keyd` holds the wrapping key, sealed to the TPM
-     and stored root-only. When `nyx-passwordsd` asks, keyd checks the peer, runs its own
-     biometric-only PAM service `nyx-vault-unlock` for that uid, and only then returns the
-     wrapping key. A process running as the user can't skip the biometric step, because
-     the key lives with root. A successful match is never itself the key.
+   - *Face or fingerprint*: `nyx-auth-keyd` seals the user key to the TPM
+     (`systemd-creds --with-key=tpm2`, with uid, app and name bound in) in a root-only
+     directory. When `nyx-passwordsd` asks, keyd checks the peer (SO_PEERCRED, the
+     executable on a fixed list, the start time against pid reuse), asks polkit with
+     `pkcheck` whether that process may use an `auth_self` action, and only then unseals.
+     polkit's prompt runs the `polkit-1` PAM stack, so whatever signs in to administrator
+     prompts (here, hands-free face) confirms the person. A process running as the user
+     can't skip that step, because the sealed key and the TPM are root's. A match is never
+     itself the key.
+   - *Why polkit and not a PAM service of keyd's own*: Irlume treats PAM service names it
+     doesn't know restrictively, and polkit is how other Linux password managers ask for
+     "system authentication". It also means the Vault follows the administrator-prompt
+     methods rather than a separate list; the `vault` row of the policy documents intent
+     until Passwords enforces its own re-prompt rules.
    - *Security key*: the FIDO2 `hmac-secret` extension derives the wrapping key from the
      key itself, with touch (and PIN if set). This is a real cryptographic factor.
    - Both expire with the vault's lock rules and are dropped when the password changes, the

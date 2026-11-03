@@ -14,4 +14,5 @@ client = ["dep:zbus"]
 nyx-auth-core = { path = "../nyx-auth-core", features = ["dbus"] }
 serde.workspace = true
 zvariant = "5"
+serde_json = "1"
 zbus = { workspace = true, optional = true }

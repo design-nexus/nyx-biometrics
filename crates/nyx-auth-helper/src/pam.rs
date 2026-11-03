@@ -80,7 +80,9 @@ fn allowed(path: &str) -> bool {
     }
     let Some(name) = path.strip_prefix("/etc/pam.d/") else { return false };
     let safe = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
-    safe && (matches!(name, "sudo" | "polkit-1" | "sddm") || name.starts_with("nyx-auth-") || name.starts_with("nyx-lock-"))
+    safe && (matches!(name, "sudo" | "polkit-1" | "sddm" | "omarchy-lock-face")
+        || name.starts_with("nyx-auth-")
+        || name.starts_with("nyx-lock-"))
 }
 
 fn ours(text: &str) -> bool {
@@ -157,10 +159,10 @@ pub struct Manifest {
 
 /// Snapshot, then write. Returns the snapshot ID; the caller arms the rollback timer.
 pub fn apply(root: &Root, changes: &[FileChange], surface: Surface, id: &str) -> Result<Manifest, PamError> {
-    if changes.iter().any(|c| c.contents.as_deref().is_some_and(|t| t.contains("nyx-auth-gate"))) {
-        let gate = root.at(nyx_auth_pam::generate::GATE);
-        if !gate.is_file() {
-            return Err(PamError::Missing(nyx_auth_pam::generate::GATE.into()));
+    for tool in [nyx_auth_pam::generate::GATE, nyx_auth_pam::generate::NOTIFY] {
+        let name = tool.rsplit('/').next().unwrap_or(tool);
+        if changes.iter().any(|c| c.contents.as_deref().is_some_and(|t| t.contains(name))) && !root.at(tool).is_file() {
+            return Err(PamError::Missing(tool.into()));
         }
     }
     let dir = root.backups().join(id);
@@ -172,7 +174,11 @@ pub fn apply(root: &Root, changes: &[FileChange], surface: Surface, id: &str) ->
             return Err(PamError::NotAllowed(c.path.clone()));
         }
         let current = fsx::read_foreign(&root.at(&c.path), MAX_FILE)?;
-        if c.contents.is_none()
+        // Nyx's own stacks may only replace or remove what Nyx wrote; the targets (sudo,
+        // polkit-1, sddm) are edited in place by design.
+        let own_file =
+            !matches!(c.path.as_str(), "/etc/pam.d/sudo" | "/etc/pam.d/polkit-1" | "/etc/pam.d/sddm") || c.contents.is_none();
+        if own_file
             && let Some(text) = &current
             && !ours(text)
         {
@@ -288,6 +294,7 @@ mod tests {
         fs::write(root.at("/etc/pam.d/sudo"), SUDO).unwrap();
         fs::write(root.at("/etc/pam.d/system-auth"), SYSTEM_AUTH).unwrap();
         fs::write(root.at(nyx_auth_pam::generate::GATE), "").unwrap();
+        fs::write(root.at(nyx_auth_pam::generate::NOTIFY), "").unwrap();
         (dir, root)
     }
 
@@ -310,7 +317,8 @@ mod tests {
         let m = Modules::system(Some(Backend::Irlume));
         let changes = prepare(&root, &recommended(), Surface::Sudo, &inv(), &m).unwrap();
         let eff = effective(&root, &changes);
-        assert_eq!(eff.len(), 2, "{eff:?}");
+        // sudo, its stack, and the session cue for the shell.
+        assert_eq!(eff.len(), 3, "{eff:?}");
         let manifest = apply(&root, &eff, Surface::Sudo, "20261101-1").unwrap();
         assert!(fs::read_to_string(root.at("/etc/pam.d/sudo")).unwrap().contains("nyx-auth-sudo"));
         assert!(root.at("/etc/pam.d/nyx-auth-sudo").exists());
@@ -319,6 +327,7 @@ mod tests {
         restore(&root, &manifest.id).unwrap();
         assert_eq!(fs::read_to_string(root.at("/etc/pam.d/sudo")).unwrap(), SUDO);
         assert!(!root.at("/etc/pam.d/nyx-auth-sudo").exists());
+        assert!(!root.at("/etc/pam.d/nyx-auth-sudo-session").exists());
         assert!(matches!(latest(&root), Err(PamError::NoSnapshot)));
     }
 
@@ -352,6 +361,12 @@ mod tests {
         let remove = FileChange { path: "/etc/pam.d/nyx-auth-foreign".into(), contents: None };
         assert!(matches!(apply(&root, &[remove], Surface::Sudo, "3"), Err(PamError::Foreign(_))));
         assert!(root.at("/etc/pam.d/nyx-auth-foreign").exists());
+
+        // Omarchy may one day write its own face service; never overwrite it.
+        fs::write(root.at("/etc/pam.d/omarchy-lock-face"), "auth required pam_irlume.so\n").unwrap();
+        let face =
+            FileChange { path: "/etc/pam.d/omarchy-lock-face".into(), contents: Some("#%PAM-1.0\n# Nyx Biometrics: x\n".into()) };
+        assert!(matches!(apply(&root, &[face], Surface::LockScreen, "5"), Err(PamError::Foreign(_))));
 
         fs::remove_file(root.at(nyx_auth_pam::generate::GATE)).unwrap();
         let changes = prepare(&root, &recommended(), Surface::Sudo, &inv(), &m).unwrap();

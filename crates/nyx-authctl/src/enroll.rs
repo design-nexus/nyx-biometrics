@@ -6,6 +6,16 @@ use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 
 use nyx_auth_helper::{HELPER_VERSION, INSTALL_PATH, POLICY, POLICY_FILE};
+
+const KEYD: &str = "/usr/lib/nyx-biometrics/nyx-auth-keyd";
+const KEYD_FILES: [(&str, &str); 3] = [
+    ("/etc/systemd/system/nyx-auth-keyd.socket", include_str!("../../nyx-auth-keyd/data/nyx-auth-keyd.socket")),
+    ("/etc/systemd/system/nyx-auth-keyd@.service", include_str!("../../nyx-auth-keyd/data/nyx-auth-keyd@.service")),
+    (
+        "/usr/share/polkit-1/actions/io.github.design_nexus.nyx.auth.unlock.policy",
+        include_str!("../../nyx-auth-keyd/data/io.github.design_nexus.nyx.auth.unlock.policy"),
+    ),
+];
 use nyx_auth_hw::face::Backend;
 use nyx_auth_hw::report::Report;
 use nyx_auth_hw::u2f::{self, AuthFile, Names};
@@ -191,7 +201,10 @@ pub fn helper_status() -> ExitCode {
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .and_then(|v| v.trim().parse::<u32>().ok());
     let policy_ok = std::fs::read_to_string(POLICY_FILE).map(|p| p == POLICY).unwrap_or(false)
-        && Path::new(nyx_auth_pam::generate::GATE).is_file();
+        && Path::new(nyx_auth_pam::generate::GATE).is_file()
+        && Path::new(nyx_auth_pam::generate::NOTIFY).is_file()
+        && Path::new(KEYD).is_file()
+        && KEYD_FILES.iter().all(|(path, text)| std::fs::read_to_string(path).is_ok_and(|t| t == *text));
     match (installed, policy_ok) {
         (Some(v), true) if v == HELPER_VERSION => {
             println!("Installed and current (version {v}).");
@@ -212,7 +225,7 @@ pub fn helper_install() -> ExitCode {
     let Some(here) = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)) else {
         return fail("Can't find the directory nyx-authctl runs from.");
     };
-    for name in ["nyx-auth-helper", "nyx-auth-gate"] {
+    for name in ["nyx-auth-helper", "nyx-auth-gate", "nyx-auth-notify", "nyx-auth-keyd"] {
         if !here.join(name).is_file() {
             return fail(format!("{} doesn't exist. Build it first.", here.join(name).display()));
         }
@@ -230,6 +243,14 @@ pub fn helper_install() -> ExitCode {
     let result = (|| -> std::io::Result<()> {
         install(&here.join("nyx-auth-helper"), INSTALL_PATH)?;
         install(&here.join("nyx-auth-gate"), nyx_auth_pam::generate::GATE)?;
+        install(&here.join("nyx-auth-notify"), nyx_auth_pam::generate::NOTIFY)?;
+        install(&here.join("nyx-auth-keyd"), KEYD)?;
+        for (path, text) in KEYD_FILES {
+            let tmp = Path::new(path).with_extension("nyx-new");
+            std::fs::write(&tmp, text)?;
+            std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o644))?;
+            std::fs::rename(&tmp, path)?;
+        }
         let ptmp = Path::new(POLICY_FILE).with_extension("policy.new");
         std::fs::write(&ptmp, POLICY)?;
         std::fs::set_permissions(&ptmp, std::os::unix::fs::PermissionsExt::from_mode(0o644))?;
@@ -237,7 +258,13 @@ pub fn helper_install() -> ExitCode {
     })();
     match result {
         Ok(()) => {
-            println!("Installed {INSTALL_PATH}, {} and {POLICY_FILE}.", nyx_auth_pam::generate::GATE);
+            let _ = Command::new("/usr/bin/systemctl").arg("daemon-reload").status();
+            let _ = Command::new("/usr/bin/systemctl").args(["enable", "--now", "nyx-auth-keyd.socket"]).status();
+            println!(
+                "Installed {INSTALL_PATH}, {}, {}, {KEYD}, the key service and {POLICY_FILE}.",
+                nyx_auth_pam::generate::GATE,
+                nyx_auth_pam::generate::NOTIFY
+            );
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "design-nexus.auth-prompt",
+  "name": "Nyx Sign-in Overlay",
+  "version": "0.1.0",
+  "author": "Design Nexus",
+  "description": "Shows the Nyx Biometrics scan overlay while a terminal sign-in (sudo) checks your face, fingerprint or security key.",
+  "omarchy": {
+    "capabilities": [
+      "authentication"
+    ]
+  },
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}
