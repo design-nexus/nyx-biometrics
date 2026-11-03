@@ -154,7 +154,10 @@ where we can't.
   marked line in each target.
 - `nyx-auth-keyd`: socket-activated, hardened unit (`NoNewPrivileges`,
   `ProtectSystem=strict`, `PrivateNetwork`, `MemoryDenyWriteExecute`, no capabilities
-  beyond what PAM and the TPM need). One request type. Peer checked by pidfd and executable.
+  beyond what PAM and the TPM need). One request type. Peer checked by its start time
+  (before and after looking, so a reused pid can't stand in), its executable, and where
+  that is installed: the user's `~/.local/bin`, `/usr/bin` or `/usr/local/bin`, as the
+  broker checks. A program of the right name anywhere else is refused.
 
 ### Vault key exposure
 
