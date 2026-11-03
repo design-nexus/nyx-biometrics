@@ -295,10 +295,9 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
 
-    // While the face is checked nothing is asked of the person, so nothing is dimmed.
     Rectangle {
       anchors.fill: parent
-      color: root.faceMode ? "transparent" : root.scrim
+      color: root.scrim
     }
 
     AuthOverlay {
@@ -327,13 +326,10 @@ Item {
       width: root.cardWidth
       height: root.cardHeight
       radius: root.cornerRadius
-      // The face scan sits high, where the terminal's sign-in shows it, clear of the
-      // window that asked; the password dialog stays in the middle.
-      readonly property bool faceCard: root.faceMode && root.overlayStyle !== "edge"
-      x: Math.round((parent.width - width) / 2) + root.shakeOffset
-      y: root.faceMode ? Math.round(parent.height * 0.18) : Math.round((parent.height - height) / 2)
-      color: faceCard ? "transparent" : root.background
-      borderSpec: faceCard ? Border.none() : root.borderSpec
+      anchors.centerIn: parent
+      anchors.horizontalCenterOffset: root.shakeOffset
+      color: root.background
+      borderSpec: root.borderSpec
       padding: root.contentMargin
 
       MouseArea { anchors.fill: parent; onClicked: root.refocus() }
@@ -357,22 +353,20 @@ Item {
 
       // Face mode: the scan overlay fills the card. Edge glow frames the whole screen
       // instead, so the card keeps a small face icon.
-      // The same card as the terminal's sign-in overlay, in the lock screen's colours.
       AuthOverlay {
         anchors.fill: parent
-        visible: card.faceCard
+        visible: root.faceMode && root.overlayStyle !== "edge"
         style: root.overlayStyle === "minimal" ? "circular" : root.overlayStyle
-        card: true
         method: "face"
         phase: "scanning"
         message: root.currentSupplementary
         intensity: root.overlayIntensity
         animate: root.overlayAnimate
-        accent: Commons.Color.lock.borderActive
-        surface: Commons.Color.lock.background
-        text: Commons.Color.lock.text
-        dim: Commons.Color.lock.placeholder
-        bad: Commons.Color.lock.textError
+        accent: root.accent
+        surface: root.background
+        text: root.foreground
+        dim: Util.alpha(root.foreground, 0.5)
+        bad: Commons.Color.polkit.textError
       }
 
       // Fingerprint mode shows just the sensor icon, centered and alone \u2014 no
