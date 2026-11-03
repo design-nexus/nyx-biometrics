@@ -152,6 +152,10 @@ pub fn status() -> ExitCode {
         "face": face,
         "fingerprint": fingerprint,
         "keys": keys,
+        "ssh_keys": crate::ssh::keys(&std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".ssh"))
+            .iter()
+            .map(|k| json!({ "file": k.file, "kind": k.kind, "comment": k.comment }))
+            .collect::<Vec<_>>(),
         "keys_plugged": report.keys_plugged,
         "surfaces": surfaces,
         "findings": report.findings(),

@@ -363,6 +363,7 @@ dependencies = [
  "nyx-auth-pam",
  "nyx-auth-proto",
  "serde_json",
+ "tempfile",
  "tokio",
  "zbus",
 ]

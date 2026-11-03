@@ -8,6 +8,7 @@ use nyx_auth_hw::report::{Paths, Report, Status};
 
 mod enroll;
 mod pam;
+mod ssh;
 mod status;
 
 const USAGE: &str = "Usage: nyx-authctl <command>
@@ -48,6 +49,12 @@ const USAGE: &str = "Usage: nyx-authctl <command>
 
   login-theme on|off|status       Use the Nyx login screen (Halo for the face) or
                                   Omarchy's own
+  ssh-key list                    SSH keys that live on a security key
+  ssh-key create [NAME] [--pin] [--no-resident]
+                                  Make one (touch the key; --pin asks for its PIN each
+                                  use). Kept on the key too, unless --no-resident
+  ssh-key load                    Bring the keys kept on a security key into ~/.ssh
+
   broker test                     Ask the sign-in broker (nyx-authd) to confirm it's you,
                                   as a Nyx app would. Grants nothing
   helper status                   Whether the root helper is installed and current
@@ -84,6 +91,9 @@ fn main() -> ExitCode {
         ["login-theme", "on"] => enroll::helper(&["login-theme", "on"], None),
         ["login-theme", "off"] => enroll::helper(&["login-theme", "off"], None),
         ["login-theme", "status"] => login_theme_status(),
+        ["ssh-key", "list"] => ssh::list(),
+        ["ssh-key", "create", rest @ ..] => ssh::create(rest),
+        ["ssh-key", "load"] => ssh::load(),
         ["broker", "test"] => broker_test(),
         ["helper", "status"] => enroll::helper_status(),
         ["helper", "install"] => enroll::helper_install(),
