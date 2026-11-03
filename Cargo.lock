@@ -344,6 +344,7 @@ dependencies = [
 name = "nyx-auth-proto"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "nyx-auth-core",
  "serde",
  "serde_json",
