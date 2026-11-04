@@ -67,7 +67,7 @@ async fn confirm(state: Arc<Mutex<State>>, caller: &str) -> Check {
         Some(start) => format!("{},{start},{}", std::process::id(), unsafe { libc::getuid() }),
         None => return Check::Failed,
     };
-    let child = tokio::process::Command::new(PKCHECK)
+    let child = tokio::process::Command::new(nyx_auth_core::system::path(PKCHECK))
         .args(["--action-id", POLKIT_ACTION, "--process", &subject, "--allow-user-interaction"])
         .env_clear()
         .stdin(std::process::Stdio::null())

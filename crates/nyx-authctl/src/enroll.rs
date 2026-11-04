@@ -53,7 +53,7 @@ fn status(cmd: &mut Command) -> ExitCode {
 }
 
 fn need(program: &str, package: &str) -> Result<(), ExitCode> {
-    if Path::new(program).is_file() {
+    if nyx_auth_core::system::path(program).is_file() {
         Ok(())
     } else {
         Err(fail(format!("{program} isn't installed. Install the {package} package first.")))
@@ -65,8 +65,12 @@ pub fn helper(args: &[&str], stdin: Option<&str>) -> ExitCode {
     if let Err(code) = need(INSTALL_PATH, "Nyx Biometrics helper (nyx-authctl helper install)") {
         return code;
     }
-    let mut cmd = Command::new(PKEXEC);
-    cmd.arg(INSTALL_PATH).args(args).stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() });
+    let mut cmd = Command::new(nyx_auth_core::system::path(PKEXEC));
+    cmd.arg(nyx_auth_core::system::path(INSTALL_PATH)).args(args).stdin(if stdin.is_some() {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    });
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => return fail(e),
@@ -123,7 +127,7 @@ pub fn keys_add(rest: &[&str]) -> ExitCode {
         return code;
     }
     eprintln!("Touch your security key when it blinks{}.", if pin { " (it will ask for its PIN first)" } else { "" });
-    let mut cmd = Command::new(PAMU2FCFG);
+    let mut cmd = Command::new(nyx_auth_core::system::path(PAMU2FCFG));
     if pin {
         cmd.arg("--pin-verification");
     }
@@ -152,7 +156,7 @@ pub fn finger_list(user: &str) -> ExitCode {
     if let Err(code) = need(FPRINTD_LIST, "fprintd") {
         return code;
     }
-    status(Command::new(FPRINTD_LIST).arg(user))
+    status(Command::new(nyx_auth_core::system::path(FPRINTD_LIST)).arg(user))
 }
 
 pub fn finger_enroll(user: &str, finger: &str) -> ExitCode {
@@ -162,7 +166,7 @@ pub fn finger_enroll(user: &str, finger: &str) -> ExitCode {
     if let Err(code) = valid_finger(finger) {
         return code;
     }
-    status(Command::new(FPRINTD_ENROLL).args(["-f", finger, user]))
+    status(Command::new(nyx_auth_core::system::path(FPRINTD_ENROLL)).args(["-f", finger, user]))
 }
 
 pub fn finger_remove(user: &str, finger: &str) -> ExitCode {
@@ -172,7 +176,7 @@ pub fn finger_remove(user: &str, finger: &str) -> ExitCode {
     if let Err(code) = valid_finger(finger) {
         return code;
     }
-    status(Command::new(FPRINTD_DELETE).args([user, "-f", finger]))
+    status(Command::new(nyx_auth_core::system::path(FPRINTD_DELETE)).args([user, "-f", finger]))
 }
 
 pub fn face(report: &Report, manage: bool) -> ExitCode {
@@ -190,10 +194,14 @@ pub fn face(report: &Report, manage: bool) -> ExitCode {
         (Backend::Gaze, true) => &["/usr/bin/gaze-gui"],
     };
     eprintln!("{}: {}", choice.backend.label(), choice.reason);
-    status(Command::new(argv[0]).args(&argv[1..]))
+    status(Command::new(nyx_auth_core::system::path(argv[0])).args(&argv[1..]))
 }
 
 pub fn helper_status() -> ExitCode {
+    if nyx_auth_core::system::nixos() {
+        println!("Installed with the system (NixOS: nyx.biometrics).");
+        return ExitCode::SUCCESS;
+    }
     let installed = Command::new(INSTALL_PATH)
         .arg("--version")
         .output()
@@ -219,6 +227,9 @@ pub fn helper_status() -> ExitCode {
 /// Copy the helper and the gate that sit next to this binary into their root-owned
 /// locations and install the polkit actions. Must be run as root, deliberately.
 pub fn helper_install() -> ExitCode {
+    if nyx_auth_core::system::nixos() {
+        return fail("On NixOS the helper comes with the system: set nyx.biometrics.enable and rebuild.");
+    }
     // SAFETY: geteuid has no preconditions.
     if unsafe { libc::geteuid() } != 0 {
         return fail("Run this with sudo.");

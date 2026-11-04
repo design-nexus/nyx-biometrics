@@ -90,6 +90,9 @@ fn show(p: &Prepared) {
 }
 
 pub fn preview(args: &[&str]) -> ExitCode {
+    if let Some(code) = nixos_managed() {
+        return code;
+    }
     let Ok((surface, flags)) = parse(args) else { return ExitCode::from(2) };
     match prepare(surface, flags.migrate) {
         Ok(p) => {
@@ -108,7 +111,7 @@ fn ask(question: &str) -> bool {
 }
 
 fn helper_capture(args: &[&str], stdin: Option<&str>) -> Result<String, String> {
-    let mut child = Command::new(PKEXEC)
+    let mut child = Command::new(nyx_auth_core::system::path(PKEXEC))
         .arg(INSTALL_PATH)
         .args(args)
         .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
@@ -143,8 +146,8 @@ fn face_test(surface: Surface) -> Result<(), String> {
     // With no input there's no password to fall back on: only the face can pass.
     if surface == Surface::Sudo {
         println!("Look at the camera.");
-        let _ = Command::new(SUDO).arg("-k").status();
-        let ok = Command::new(SUDO)
+        let _ = Command::new(nyx_auth_core::system::path(SUDO)).arg("-k").status();
+        let ok = Command::new(nyx_auth_core::system::path(SUDO))
             .args(["-S", "-p", "", "/usr/bin/true"])
             .stdin(std::process::Stdio::null())
             .status()
@@ -182,14 +185,18 @@ fn live_test(surface: Surface, face: bool) -> Result<(), String> {
         // A real administrator prompt: the polkit agent, the socket-activated helper and the
         // same PAM stack as every other prompt.
         Surface::Polkit => {
-            let ok = Command::new("/usr/bin/pkexec").arg("/usr/bin/true").status().map(|s| s.success()).unwrap_or(false);
+            let ok = Command::new(nyx_auth_core::system::path("/usr/bin/pkexec"))
+                .arg(nyx_auth_core::system::path("/usr/bin/true"))
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
             if ok { Ok(()) } else { Err("the administrator prompt didn't accept".into()) }
         }
         Surface::Sudo => {
-            let _ = Command::new(SUDO).arg("-k").status();
+            let _ = Command::new(nyx_auth_core::system::path(SUDO)).arg("-k").status();
             // With Irlume's consent prompt on, its "use your face?" question arrives as sudo's
             // ordinary password prompt; name both answers.
-            let ok = Command::new(SUDO)
+            let ok = Command::new(nyx_auth_core::system::path(SUDO))
                 .args(["-p", "Look at the camera (type yes first if asked), or type your password: ", "/usr/bin/true"])
                 .status()
                 .map(|s| s.success())
@@ -214,6 +221,9 @@ fn live_test(surface: Surface, face: bool) -> Result<(), String> {
 }
 
 pub fn apply(args: &[&str]) -> ExitCode {
+    if let Some(code) = nixos_managed() {
+        return code;
+    }
     let Ok((surface, flags)) = parse(args) else { return ExitCode::from(2) };
     let migrate = flags.migrate;
     let p = match prepare(surface, migrate) {
@@ -279,6 +289,9 @@ pub fn test(args: &[&str]) -> ExitCode {
 }
 
 pub fn restore(id: Option<&str>) -> ExitCode {
+    if let Some(code) = nixos_managed() {
+        return code;
+    }
     let mut args = vec!["pam-restore"];
     args.extend(id);
     match helper_capture(&args, None) {
@@ -290,4 +303,14 @@ pub fn restore(id: Option<&str>) -> ExitCode {
             "{e}\nFrom a root shell or a TTY: {INSTALL_PATH} is run by root as `pam-rollback ID`, or copy the files back from /var/lib/nyx-biometrics/pam-backups/ID."
         )),
     }
+}
+
+/// On NixOS the system's PAM files come from its configuration; Nyx doesn't write them.
+fn nixos_managed() -> Option<ExitCode> {
+    nyx_auth_core::system::nixos().then(|| {
+        fail(
+            "On NixOS, sign-in for login, sudo and administrator prompts is set in the system \
+             configuration (nyx.biometrics.surfaces) and applied with nixos-rebuild.",
+        )
+    })
 }

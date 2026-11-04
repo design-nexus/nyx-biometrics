@@ -8,6 +8,7 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+nyx-auth-core = { path = "../nyx-auth-core" }
 nyx-auth-proto = { path = "../nyx-auth-proto" }
 nyx-auth-hw = { path = "../nyx-auth-hw" }
 serde_json = "1"

@@ -9,6 +9,7 @@ mod assurance;
 mod method;
 mod policy;
 mod surface;
+pub mod system;
 
 pub use assurance::{Assurance, Proof};
 pub use method::{Camera, FaceCapability, Factor, Inventory, KeyCheck, KeyInfo, Method, MethodKind};

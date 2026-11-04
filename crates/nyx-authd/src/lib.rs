@@ -37,14 +37,9 @@ const CALLERS: &[(&str, Caller)] = &[
 ];
 
 /// The caller for an executable, if it's one of the suite's and installed where the suite
-/// installs: the user's `~/.local/bin`, or the system's.
+/// installs ([`nyx_auth_core::system::suite_program`]).
 pub fn known_caller(exe: &Path, home: &Path) -> Option<Caller> {
-    let dir = exe.parent()?;
-    let installed = dir == home.join(".local/bin") || dir == Path::new("/usr/bin") || dir == Path::new("/usr/local/bin");
-    if !installed {
-        return None;
-    }
-    let name = exe.file_name()?.to_str()?;
+    let name = nyx_auth_core::system::suite_program(exe, home)?;
     CALLERS.iter().find(|(n, _)| *n == name).map(|(_, c)| c.clone())
 }
 

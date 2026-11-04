@@ -137,7 +137,7 @@ pub fn status() -> ExitCode {
         })
         .collect();
 
-    let helper = std::process::Command::new(nyx_auth_helper::INSTALL_PATH)
+    let helper = std::process::Command::new(nyx_auth_core::system::path(nyx_auth_helper::INSTALL_PATH))
         .arg("--version")
         .output()
         .ok()

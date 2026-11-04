@@ -137,10 +137,7 @@ pub trait Auth {
 #[cfg(feature = "client")]
 fn broker_program(exe: &std::path::Path) -> bool {
     let home = std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
-    exe.file_name().is_some_and(|n| n == "nyx-authd")
-        && exe.parent().is_some_and(|d| {
-            d == home.join(".local/bin") || d == std::path::Path::new("/usr/bin") || d == std::path::Path::new("/usr/local/bin")
-        })
+    nyx_auth_core::system::suite_program(exe, &home).as_deref() == Some("nyx-authd")
 }
 
 /// The broker, checked before anything is asked of it: any program running as the user can

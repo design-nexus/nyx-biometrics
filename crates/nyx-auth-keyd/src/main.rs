@@ -55,7 +55,7 @@ impl System for Real {
 /// systemd-creds with the secret on stdin, never on the command line.
 fn creds(args: &[&str], input: &[u8]) -> Result<Zeroizing<Vec<u8>>, String> {
     use std::process::{Command, Stdio};
-    let mut child = Command::new(SYSTEMD_CREDS)
+    let mut child = Command::new(nyx_auth_core::system::path(SYSTEMD_CREDS))
         .args(args)
         .env_clear()
         .stdin(Stdio::piped())
@@ -87,10 +87,7 @@ fn peer(fd: i32) -> Result<Peer, String> {
         .map(|p| PathBuf::from(p.to_string_lossy().trim_end_matches(" (deleted)")))
         .map_err(|_| "can't see the peer's program")?;
     let home = home_of(cred.uid).ok_or("the peer's user has no home")?;
-    if !installed(&path, &home) {
-        return Err("this program isn't installed where the suite installs it".into());
-    }
-    let exe = path.file_name().map(|n| n.to_string_lossy().to_string()).ok_or("can't see the peer's program")?;
+    let exe = installed(&path, &home).ok_or("this program isn't installed where the suite installs it")?;
     // Read the start time again: if the pid was reused meanwhile, it changed.
     if start(pid) != Some(start_time) {
         return Err("the peer changed".into());

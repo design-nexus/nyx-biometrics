@@ -36,7 +36,7 @@ pub enum RunError {
     Io { program: String, source: io::Error },
 }
 
-/// Runs a program by absolute path.
+/// Runs a program by absolute path (see [`nyx_auth_core::system::path`]).
 pub trait Runner {
     fn run(&self, program: &str, args: &[&str], timeout: Duration) -> Result<Output, RunError>;
 
@@ -53,7 +53,7 @@ impl Runner for SystemRunner {
         if !self.exists(program) {
             return Err(RunError::Missing(program.into()));
         }
-        let mut cmd = Command::new(program);
+        let mut cmd = Command::new(nyx_auth_core::system::path(program));
         cmd.args(args).env_clear().stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         for key in KEEP_ENV {
             if let Ok(v) = std::env::var(key) {
@@ -95,7 +95,7 @@ impl Runner for SystemRunner {
     }
 
     fn exists(&self, program: &str) -> bool {
-        std::fs::metadata(program).map(|m| m.is_file()).unwrap_or(false)
+        std::fs::metadata(nyx_auth_core::system::path(program)).map(|m| m.is_file()).unwrap_or(false)
     }
 }
 

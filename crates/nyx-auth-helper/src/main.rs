@@ -58,6 +58,11 @@ fn main() -> ExitCode {
         }
     };
     let verb = args.first().map(String::as_str).unwrap_or("");
+    // NixOS builds PAM and the login screen from its configuration.
+    if nyx_auth_core::system::nixos() && (verb.starts_with("pam-") || verb == "login-theme") {
+        eprintln!("On NixOS this is set in the system configuration (nyx.biometrics)");
+        return ExitCode::from(126);
+    }
     let result = run(&user, &args);
     log(&user, verb, &result);
     finish(result)

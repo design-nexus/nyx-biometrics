@@ -282,6 +282,7 @@ dependencies = [
 name = "nyx-auth-core"
 version = "0.1.0"
 dependencies = [
+ "nyx-peer",
  "serde",
  "thiserror",
  "toml",
@@ -321,6 +322,7 @@ name = "nyx-auth-keyd"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "nyx-auth-core",
  "nyx-auth-hw",
  "nyx-auth-proto",
  "serde_json",
@@ -381,6 +383,11 @@ dependencies = [
  "tokio",
  "zbus",
 ]
+
+[[package]]
+name = "nyx-peer"
+version = "0.1.0"
+source = "git+https://github.com/design-nexus/nyx-core.git?rev=394ddf8193797cd1f420fac98b097d04fa75f0e2#394ddf8193797cd1f420fac98b097d04fa75f0e2"
 
 [[package]]
 name = "once_cell"

@@ -139,7 +139,7 @@ pub fn create(rest: &[&str]) -> ExitCode {
     }
     let _ = std::fs::set_permissions(&dir, std::os::unix::fs::PermissionsExt::from_mode(0o700));
     println!("Plug in the security key and touch it when it blinks{}.", if pin { " (it asks for its PIN first)" } else { "" });
-    match Command::new(SSH_KEYGEN).args(&args).status() {
+    match Command::new(nyx_auth_core::system::path(SSH_KEYGEN)).args(&args).status() {
         Ok(s) if s.success() => {
             println!("\nMade ~/.ssh/id_ed25519_sk_{name}. Add ~/.ssh/id_ed25519_sk_{name}.pub to the servers you use.");
             if resident {
@@ -158,7 +158,7 @@ pub fn load() -> ExitCode {
         return fail("Can't create ~/.ssh.");
     }
     println!("Plug in the security key; it may ask for its PIN.");
-    match Command::new(SSH_KEYGEN).arg("-K").current_dir(&dir).stdin(Stdio::inherit()).status() {
+    match Command::new(nyx_auth_core::system::path(SSH_KEYGEN)).arg("-K").current_dir(&dir).stdin(Stdio::inherit()).status() {
         Ok(s) if s.success() => list(),
         _ => fail("No keys came back. Is the security key plugged in, and were they made as resident keys?"),
     }
