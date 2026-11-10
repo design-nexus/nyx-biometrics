@@ -387,7 +387,7 @@ dependencies = [
 [[package]]
 name = "nyx-peer"
 version = "0.1.0"
-source = "git+https://github.com/design-nexus/nyx-core.git?rev=394ddf8193797cd1f420fac98b097d04fa75f0e2#394ddf8193797cd1f420fac98b097d04fa75f0e2"
+source = "git+https://github.com/design-nexus/nyx-core.git?rev=47c5e0f328b4042df4c08fc317510644a64d1124#47c5e0f328b4042df4c08fc317510644a64d1124"
 
 [[package]]
 name = "once_cell"
