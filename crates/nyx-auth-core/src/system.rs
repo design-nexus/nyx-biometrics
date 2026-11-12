@@ -31,13 +31,21 @@ fn alternatives(path: &str) -> Vec<PathBuf> {
     out
 }
 
-/// The suite program `exe` runs, if it's installed where the suite installs programs:
-/// the user's `~/.local/bin`, `/usr/bin`, `/usr/local/bin`, or a folder root lists in
-/// `/etc/nyx/trusted-bin` (NixOS keeps each app in its own). Nix's wrapped `.NAME-wrapped`
-/// counts as `NAME`.
+/// The suite program `exe` runs, if it's installed where the suite installs programs: a
+/// folder root lists in `/etc/nyx/trusted-bin` (NixOS keeps each app in its own), and
+/// elsewhere also the user's `~/.local/bin`, `/usr/bin` and `/usr/local/bin`. On NixOS
+/// only the list counts: any of the user's programs can write `~/.local/bin`. Nix's
+/// wrapped `.NAME-wrapped` counts as `NAME`.
 pub fn suite_program(exe: &Path, home: &Path) -> Option<String> {
+    suite_program_in(exe, home, nixos(), nyx_peer::trusted_dirs(Path::new(nyx_peer::TRUSTED_DIRS_FILE)))
+}
+
+fn suite_program_in(exe: &Path, home: &Path, nixos: bool, listed: Vec<PathBuf>) -> Option<String> {
+    if nixos {
+        return nyx_peer::program_in(exe, Path::new("/nonexistent"), &listed);
+    }
     let mut dirs = vec![PathBuf::from("/usr/bin"), PathBuf::from("/usr/local/bin")];
-    dirs.extend(nyx_peer::trusted_dirs(Path::new(nyx_peer::TRUSTED_DIRS_FILE)));
+    dirs.extend(listed);
     nyx_peer::program_in(exe, &home.join(".local/bin"), &dirs)
 }
 
@@ -75,6 +83,17 @@ mod tests {
         assert_eq!(suite_program(Path::new("/usr/bin/.nyx-passwordsd-wrapped"), home).as_deref(), Some("nyx-passwordsd"));
         assert!(suite_program(Path::new("/tmp/nyx-passwordsd"), home).is_none());
         assert!(suite_program(Path::new("/home/u/.local/bin/sub/nyx-passwordsd"), home).is_none());
+    }
+
+    #[test]
+    fn nixos_trusts_only_the_listed_folders() {
+        let home = Path::new("/home/u");
+        let store = PathBuf::from("/nix/store/abc-nyx-passwords/bin");
+        let listed = || vec![store.clone()];
+        assert_eq!(suite_program_in(&store.join(".nyx-passwordsd-wrapped"), home, true, listed()).as_deref(), Some("nyx-passwordsd"));
+        assert!(suite_program_in(Path::new("/home/u/.local/bin/nyx-passwordsd"), home, true, listed()).is_none());
+        assert!(suite_program_in(Path::new("/usr/bin/nyx-passwordsd"), home, true, listed()).is_none());
+        assert!(suite_program_in(Path::new("/home/u/.local/bin/nyx-passwordsd"), home, false, listed()).is_some());
     }
 
     #[test]

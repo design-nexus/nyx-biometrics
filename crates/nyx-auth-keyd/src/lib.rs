@@ -11,8 +11,15 @@ use std::path::{Path, PathBuf};
 use nyx_auth_proto::keyd::{MAX_PURPOSE_CHARS, Reply, Request, valid_name};
 use zeroize::Zeroizing;
 
-/// Apps that may keep secrets here, by executable name.
-pub const CLIENTS: &[&str] = &["nyx-passwordsd"];
+/// Apps that may keep secrets here, by executable name, with the name polkit shows.
+pub const CLIENTS: &[(&str, &str)] = &[("nyx-passwordsd", "Nyx Passwords")];
+
+/// What polkit asks before handing `exe`'s secret back: the app as the service knows it,
+/// and the app's own `purpose` only as the detail.
+pub fn load_message(exe: &str, purpose: &str) -> String {
+    let app = CLIENTS.iter().find(|(e, _)| *e == exe).map_or(exe, |(_, name)| name);
+    format!("{app} wants to unlock with your saved key ({purpose})")
+}
 
 /// The program `exe` runs, if it's installed where the suite installs its programs
 /// ([`nyx_auth_core::system::suite_program`]). A program of the right name anywhere else
@@ -68,7 +75,7 @@ impl Keyd<'_> {
     }
 
     pub fn handle(&self, peer: &Peer, request: Request) -> Reply {
-        if !CLIENTS.contains(&peer.exe.as_str()) {
+        if !CLIENTS.iter().any(|(exe, _)| *exe == peer.exe) {
             return Reply::err("refused", "this program may not keep secrets here");
         }
         match request {
@@ -112,7 +119,7 @@ impl Keyd<'_> {
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Reply::err("not-found", "nothing saved"),
                     Err(e) => return Reply::err("failed", e.to_string()),
                 };
-                match self.system.authorize(peer, ACTION_LOAD, &purpose) {
+                match self.system.authorize(peer, ACTION_LOAD, &load_message(&peer.exe, &purpose)) {
                     Ok(true) => {}
                     Ok(false) => return Reply::err("denied", "not confirmed"),
                     Err(e) => return Reply::err("failed", e),
@@ -196,6 +203,8 @@ mod tests {
         assert_eq!(k.handle(&p, Request::Exists { name: "vault-a".into() }).exists, Some(true));
         assert_eq!(k.handle(&p, load("vault-a")).secret.as_deref(), Some("user-key"));
         assert_eq!(yes.asked.borrow().iter().map(|(a, _)| a.as_str()).collect::<Vec<_>>(), vec![ACTION_STORE, ACTION_LOAD]);
+        // The prompt names the app the service verified; the app's text is only the detail.
+        assert_eq!(yes.asked.borrow()[1].1, "Nyx Passwords wants to unlock with your saved key (Unlock Nyx Passwords)");
 
         let mode = std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(dir.path().join("1000")).unwrap().permissions());
         assert_eq!(mode & 0o777, 0o700);
