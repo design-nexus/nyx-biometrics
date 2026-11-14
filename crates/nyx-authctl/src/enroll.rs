@@ -17,8 +17,10 @@ const KEYD_FILES: [(&str, &str); 3] = [
     ),
 ];
 use nyx_auth_hw::face::Backend;
+use nyx_auth_hw::fido2::{self, Keys};
 use nyx_auth_hw::report::Report;
 use nyx_auth_hw::u2f::{self, AuthFile, Names};
+use nyx_auth_hw::SystemRunner;
 
 const PKEXEC: &str = "/usr/bin/pkexec";
 const PAMU2FCFG: &str = "/usr/bin/pamu2fcfg";
@@ -126,6 +128,11 @@ pub fn keys_add(rest: &[&str]) -> ExitCode {
     if let Err(code) = need(PAMU2FCFG, "pam-u2f") {
         return code;
     }
+    if pin {
+        if let Err(code) = ensure_pin() {
+            return code;
+        }
+    }
     eprintln!("Touch your security key when it blinks{}.", if pin { " (it will ask for its PIN first)" } else { "" });
     let mut cmd = Command::new(nyx_auth_core::system::path(PAMU2FCFG));
     if pin {
@@ -140,6 +147,25 @@ pub fn keys_add(rest: &[&str]) -> ExitCode {
     }
     let line = String::from_utf8_lossy(&out.stdout).into_owned();
     helper(&["keys-add", if backup { "backup" } else { "primary" }, name], Some(&line))
+}
+
+/// pamu2fcfg refuses `--pin-verification` on a key with no PIN, so set one first. Only
+/// when exactly one key is plugged in: with more, pamu2fcfg picks the key itself.
+fn ensure_pin() -> Result<(), ExitCode> {
+    let Keys::Present { keys } = fido2::probe(&SystemRunner) else { return Ok(()) };
+    let [(token, Some(info))] = keys.as_slice() else { return Ok(()) };
+    if info.pin_set() {
+        return Ok(());
+    }
+    if !info.options.contains_key("clientPin") {
+        return Err(fail("This key can't have a PIN. Register it as touch only: nyx-authctl keys add NAME"));
+    }
+    eprintln!("This key has no PIN yet. Choose one now; it will be asked for whenever the key is used.");
+    match Command::new(nyx_auth_core::system::path(fido2::FIDO2_TOKEN)).args(["-S", &token.device]).status() {
+        Ok(s) if s.success() => Ok(()),
+        Ok(_) => Err(fail("The PIN wasn't set, so the key wasn't registered.")),
+        Err(e) => Err(fail(e)),
+    }
 }
 
 pub fn keys_rename(id: &str, rest: &[&str]) -> ExitCode {

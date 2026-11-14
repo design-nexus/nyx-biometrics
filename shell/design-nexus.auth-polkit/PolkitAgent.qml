@@ -58,13 +58,18 @@ Item {
   // gate skips pam_fprintd — we switch to the password field instead.
   // Face runs first in the stack, so while PAM is busy without asking anything, it's the
   // face being checked: show the scan instead of the field.
-  readonly property bool faceMode: faceConfigured && !laptopClosed && dialogVisible && !responseRequired && !submitted && !errorFlash
-  readonly property bool fingerprintMode: !faceMode && fingerprintConfigured && !laptopClosed && dialogVisible && !responseRequired && !submitted && !errorFlash
+  // A security key waiting for a touch, after the face (if any) has given up.
+  readonly property bool keyMode: dialogVisible && !responseRequired && !submitted && !errorFlash && PolkitModel.messageLooksKeyTouch(currentSupplementary)
+  // The question is the key's PIN, not the account password.
+  readonly property bool pinMode: responseRequired && PolkitModel.promptLooksPin(currentPrompt)
+  readonly property bool faceMode: !keyMode && faceConfigured && !laptopClosed && dialogVisible && !responseRequired && !submitted && !errorFlash
+  readonly property bool fingerprintMode: !keyMode && !faceMode && fingerprintConfigured && !laptopClosed && dialogVisible && !responseRequired && !submitted && !errorFlash
   readonly property int faceSize: Style.space(overlayStyle === "halo" ? 276 : 248)
-  readonly property int cardHeight: faceMode ? faceSize : panel.height > 0 ? Math.min(fieldHeight + contentMargin * 2, panel.height - Style.gapsOut * 2) : fieldHeight + contentMargin * 2
+  readonly property bool scanMode: faceMode || keyMode
+  readonly property int cardHeight: scanMode ? faceSize : panel.height > 0 ? Math.min(fieldHeight + contentMargin * 2, panel.height - Style.gapsOut * 2) : fieldHeight + contentMargin * 2
   // Password mode is a wide field; fingerprint mode collapses to a square that
   // just frames the centered sensor icon.
-  readonly property int cardWidth: faceMode ? faceSize : fingerprintMode ? cardHeight : Math.min(Style.space(312), Math.max(Style.space(260), panel.width - Style.gapsOut * 2))
+  readonly property int cardWidth: scanMode ? faceSize : fingerprintMode ? cardHeight : Math.min(Style.space(312), Math.max(Style.space(260), panel.width - Style.gapsOut * 2))
 
   function authorizationLabel(message) {
     return message ? PolkitModel.authorizationLabel(message, I18n.t) : I18n.t("polkit.authenticationNeeded")
@@ -118,7 +123,7 @@ Item {
     if (!dialogVisible) return
     // In fingerprint mode there is no field to type into — park focus on the
     // key catcher so Escape still cancels; otherwise focus the password field.
-    if (fingerprintMode || faceMode) keyCatcher.forceActiveFocus()
+    if (fingerprintMode || scanMode) keyCatcher.forceActiveFocus()
     else passwordInput.forceActiveFocus()
   }
 
@@ -302,11 +307,11 @@ Item {
 
     AuthOverlay {
       anchors.fill: parent
-      visible: root.faceMode && root.overlayStyle === "edge"
+      visible: root.scanMode && root.overlayStyle === "edge"
       style: "edge"
-      method: "face"
+      method: root.keyMode ? "key" : "face"
       phase: "scanning"
-      message: root.currentSupplementary
+      message: root.keyMode ? "" : root.currentSupplementary
       intensity: root.overlayIntensity
       animate: root.overlayAnimate
       accent: root.accent
@@ -329,7 +334,7 @@ Item {
       anchors.centerIn: parent
       anchors.horizontalCenterOffset: root.shakeOffset
       // The face scan brings its own see-through card, as the terminal's sign-in does.
-      readonly property bool faceCard: root.faceMode && root.overlayStyle !== "edge"
+      readonly property bool faceCard: root.scanMode && root.overlayStyle !== "edge"
       color: faceCard ? "transparent" : root.background
       borderSpec: faceCard ? Border.none() : root.borderSpec
       padding: root.contentMargin
@@ -360,9 +365,9 @@ Item {
         visible: card.faceCard
         style: root.overlayStyle === "minimal" ? "circular" : root.overlayStyle
         card: true
-        method: "face"
+        method: root.keyMode ? "key" : "face"
         phase: "scanning"
-        message: root.currentSupplementary
+        message: root.keyMode ? "" : root.currentSupplementary
         intensity: root.overlayIntensity
         animate: root.overlayAnimate
         accent: Commons.Color.lock.borderActive
@@ -378,8 +383,8 @@ Item {
         anchors.centerIn: parent
         width: Math.round(root.fieldHeight * 0.7)
         height: width
-        visible: root.fingerprintMode || (root.faceMode && root.overlayStyle === "edge")
-        text: root.faceMode ? String.fromCodePoint(0xF0C7B) : "\udb80\ude37"
+        visible: root.fingerprintMode || (root.scanMode && root.overlayStyle === "edge")
+        text: root.keyMode ? String.fromCodePoint(0xF030B) : root.faceMode ? String.fromCodePoint(0xF0C7B) : "\udb80\ude37"
         fontFamily: root.fontFamily
         fontSize: Math.round(root.fieldHeight * 0.7)
         color: root.errorFlash ? Commons.Color.polkit.textError : root.accent
@@ -387,7 +392,7 @@ Item {
 
       Row {
         id: cardRow
-        visible: !root.fingerprintMode && !root.faceMode
+        visible: !root.fingerprintMode && !root.scanMode
         anchors.fill: parent
         anchors.topMargin: card.contentTopInset
         anchors.rightMargin: card.contentRightInset
@@ -396,7 +401,7 @@ Item {
         spacing: Style.space(14)
 
         Text {
-          text: "\uf023"
+          text: root.pinMode ? String.fromCodePoint(0xF030B) : "\uf023"
           color: root.errorFlash ? Commons.Color.polkit.textError : root.accent
           font.family: root.fontFamily
           font.pixelSize: Style.font.iconLarge
@@ -440,7 +445,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: root.errorFlash ? I18n.t("polkit.wrong") : (root.submitted ? I18n.t("polkit.checking") : I18n.t("polkit.enterPassword"))
+            text: root.errorFlash ? I18n.t("polkit.wrong") : (root.submitted ? I18n.t("polkit.checking") : root.pinMode ? I18n.t("polkit.enterKeyPin", "Security key PIN") : I18n.t("polkit.enterPassword"))
             color: root.errorFlash ? Commons.Color.polkit.textError : root.foreground
             opacity: root.errorFlash ? 1 : 0.36
             font.family: root.fontFamily

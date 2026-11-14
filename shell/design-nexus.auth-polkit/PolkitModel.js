@@ -3,6 +3,17 @@ function promptLooksFingerprint(text) {
   return s.indexOf("finger") !== -1 || s.indexOf("fprint") !== -1 || s.indexOf("swipe") !== -1
 }
 
+// pam_u2f asks "Please enter the PIN:" through the same conversation as the password.
+function promptLooksPin(text) {
+  return /\bPIN\b/i.test(String(text || ""))
+}
+
+// pam_u2f's cue while it waits for a touch: "Please touch the FIDO authenticator." (older
+// releases: "Please touch the device.")
+function messageLooksKeyTouch(text) {
+  return /touch the (FIDO authenticator|device)/i.test(String(text || ""))
+}
+
 function fingerprintConfiguredFromPamConfig(raw) {
   // Fingerprint is available whenever pam_fprintd appears anywhere in the auth
   // stack — it need not be the first module. A clamshell gate (pam_exec) may
@@ -27,6 +38,8 @@ function authorizationLabel(message, tr) {
 if (typeof module !== "undefined") {
   module.exports = {
     promptLooksFingerprint: promptLooksFingerprint,
+    promptLooksPin: promptLooksPin,
+    messageLooksKeyTouch: messageLooksKeyTouch,
     fingerprintConfiguredFromPamConfig: fingerprintConfiguredFromPamConfig,
     authorizationLabel: authorizationLabel
   }
