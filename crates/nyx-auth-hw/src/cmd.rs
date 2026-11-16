@@ -63,18 +63,21 @@ impl Runner for SystemRunner {
         cmd.env("LC_ALL", "C");
         let io_err = |source| RunError::Io { program: program.into(), source };
         let mut child = cmd.spawn().map_err(io_err)?;
-        let mut stdout = child.stdout.take().expect("piped");
-        let mut stderr = child.stderr.take().expect("piped");
-        let out_thread = std::thread::spawn(move || {
-            let mut s = String::new();
-            let _ = stdout.read_to_string(&mut s);
-            s
-        });
-        let err_thread = std::thread::spawn(move || {
-            let mut s = String::new();
-            let _ = stderr.read_to_string(&mut s);
-            s
-        });
+        let stdout = child.stdout.take().expect("piped");
+        let stderr = child.stderr.take().expect("piped");
+        // Read on threads that report over channels, so a grandchild still holding a pipe
+        // open can't keep this waiting past the deadline.
+        let reader = |mut pipe: Box<dyn Read + Send>| {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let mut s = String::new();
+                let _ = pipe.read_to_string(&mut s);
+                let _ = tx.send(s);
+            });
+            rx
+        };
+        let out_rx = reader(Box::new(stdout));
+        let err_rx = reader(Box::new(stderr));
         let deadline = Instant::now() + timeout;
         let status = loop {
             if let Some(status) = child.try_wait().map_err(io_err)? {
@@ -87,11 +90,14 @@ impl Runner for SystemRunner {
             }
             std::thread::sleep(Duration::from_millis(15));
         };
-        Ok(Output {
-            status: status.code(),
-            stdout: out_thread.join().unwrap_or_default(),
-            stderr: err_thread.join().unwrap_or_default(),
-        })
+        let collect = |rx: std::sync::mpsc::Receiver<String>| {
+            // A child that exits right at the deadline still gets a moment for its output.
+            let left = deadline.saturating_duration_since(Instant::now()).max(Duration::from_millis(100));
+            rx.recv_timeout(left).map_err(|_| RunError::TimedOut(program.into()))
+        };
+        let stdout = collect(out_rx)?;
+        let stderr = collect(err_rx).unwrap_or_default();
+        Ok(Output { status: status.code(), stdout, stderr })
     }
 
     fn exists(&self, program: &str) -> bool {
@@ -169,6 +175,14 @@ mod tests {
             Err(RunError::TimedOut(_))
         ));
         assert!(matches!(SystemRunner.run("/nonexistent/tool", &[], Duration::from_secs(1)), Err(RunError::Missing(_))));
+    }
+
+    #[test]
+    fn a_grandchild_holding_the_pipe_does_not_outlast_the_deadline() {
+        let started = Instant::now();
+        let r = SystemRunner.run("/bin/sh", &["-c", "sleep 5 & echo hi"], Duration::from_millis(500));
+        assert!(matches!(r, Err(RunError::TimedOut(_))), "{r:?}");
+        assert!(started.elapsed() < Duration::from_secs(3), "took {:?}", started.elapsed());
     }
 
     #[test]

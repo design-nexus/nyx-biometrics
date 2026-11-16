@@ -56,16 +56,23 @@ pub fn decide(kind: Kind, ctx: &Context) -> Option<&'static str> {
     if ctx.ancestors.iter().any(|a| REMOTE_PARENTS.contains(&a.as_str())) {
         return Some("remote session");
     }
+    // The login screen signs in someone who has no session yet: its helper belongs to no
+    // audit session and the user has no display. SDDM only drives local seats, so its own
+    // helper, started by the SDDM daemon, is someone at this computer.
+    let greeter = ctx.service == "sddm"
+        && ctx.ancestors.first().is_some_and(|a| a == "sddm-helper")
+        && ctx.ancestors.iter().any(|a| a == "sddm");
     match ctx.caller_session_remote {
         Some(true) => return Some("remote session"),
         Some(false) => {}
+        None if greeter => {}
         // The socket-activated polkit helper belongs to no session; for it the user's
         // display session below decides. Anything else without a session (cron, services)
         // isn't someone at the keyboard.
         None if ctx.service == "polkit-1" => {}
         None => return Some("no login session"),
     }
-    if ctx.local_display != Some(true) {
+    if !greeter && ctx.local_display != Some(true) {
         return Some("no active local session");
     }
     if kind == Kind::BuiltIn && ctx.lid_closed {
@@ -181,6 +188,26 @@ mod tests {
         let polkit =
             Context { service: "polkit-1".into(), caller_session_remote: None, ancestors: vec!["systemd".into()], ..local() };
         assert_eq!(decide(Kind::BuiltIn, &polkit), None);
+    }
+
+    #[test]
+    fn the_login_screen_runs_methods() {
+        let greeter = Context {
+            service: "sddm".into(),
+            ancestors: vec!["sddm-helper".into(), "sddm".into(), "systemd".into()],
+            caller_session_remote: None,
+            local_display: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(decide(Kind::BuiltIn, &greeter), None);
+        assert_eq!(decide(Kind::Local, &greeter), None);
+        assert_eq!(decide(Kind::BuiltIn, &Context { lid_closed: true, ..greeter.clone() }), Some("lid closed"));
+        assert_eq!(decide(Kind::Local, &Context { rhost: "10.0.0.5".into(), ..greeter.clone() }), Some("remote host"));
+        // Only SDDM's own helper counts, and only for the sddm service.
+        let other = Context { ancestors: vec!["pam-try".into(), "bash".into(), "sddm".into()], ..greeter.clone() };
+        assert_eq!(decide(Kind::BuiltIn, &other), Some("no login session"));
+        let service = Context { service: "sudo".into(), ..greeter };
+        assert_eq!(decide(Kind::BuiltIn, &service), Some("no login session"));
     }
 
     #[test]

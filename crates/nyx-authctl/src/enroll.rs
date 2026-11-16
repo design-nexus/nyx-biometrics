@@ -128,10 +128,10 @@ pub fn keys_add(rest: &[&str]) -> ExitCode {
     if let Err(code) = need(PAMU2FCFG, "pam-u2f") {
         return code;
     }
-    if pin {
-        if let Err(code) = ensure_pin() {
-            return code;
-        }
+    if pin
+        && let Err(code) = ensure_pin()
+    {
+        return code;
     }
     eprintln!("Touch your security key when it blinks{}.", if pin { " (it will ask for its PIN first)" } else { "" });
     let mut cmd = Command::new(nyx_auth_core::system::path(PAMU2FCFG));

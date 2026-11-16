@@ -40,7 +40,11 @@ fn main() -> ExitCode {
         (_, 0) => true,
         _ => return ExitCode::SUCCESS,
     };
-    // The sign-in waits on this; never more than a second in all.
+    // `start` is waited for (never more than a second in all) so the shell shows the scan
+    // before it begins. `failed` and `done` only change what the shell shows, so the
+    // sign-in doesn't wait for them: the call runs on after this exits, its output
+    // nowhere pam_exec waits on.
+    let wait = event == "start";
     let deadline = Instant::now() + Duration::from_secs(1);
     for display in notify::displays(Path::new(&format!("/run/user/{uid}"))) {
         if let Some(argv) = notify::command(event, method, &service, &user, uid, &display) {
@@ -49,16 +53,18 @@ fn main() -> ExitCode {
             if switch {
                 cmd.uid(uid).gid(gid);
             }
-            deliver(cmd, deadline);
+            deliver(cmd, wait.then_some(deadline));
         }
     }
     ExitCode::SUCCESS
 }
 
-fn deliver(mut cmd: Command, deadline: Instant) {
+fn deliver(mut cmd: Command, deadline: Option<Instant>) {
     let Ok(mut child) = cmd.env_clear().stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() else {
         return;
     };
+    // Not waited for: once this exits, the child is reparented and reaped there.
+    let Some(deadline) = deadline else { return };
     loop {
         match child.try_wait() {
             Ok(Some(_)) | Err(_) => break,

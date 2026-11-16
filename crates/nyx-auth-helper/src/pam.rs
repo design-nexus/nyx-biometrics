@@ -4,9 +4,7 @@
 //! against hardware it probes itself, generates with fixed templates, checks the result,
 //! and only then writes, and only paths on a fixed list.
 
-use std::collections::hash_map::DefaultHasher;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use nyx_auth_core::{PolicySet, Surface};
@@ -118,14 +116,30 @@ pub fn prepare(
     Ok(changes)
 }
 
-/// A digest of the changes, so the helper applies exactly what was previewed.
+/// A digest of the changes, so the helper applies exactly what was previewed. It only
+/// tells two previews apart (the helper regenerates everything itself), so FNV-1a does;
+/// unlike `DefaultHasher` its output is the same whichever toolchain built each side.
 pub fn fingerprint(changes: &Changes) -> String {
-    let mut h = DefaultHasher::new();
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut feed = |bytes: &[u8]| {
+        for b in bytes {
+            h = (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3);
+        }
+    };
     for c in &changes.files {
-        c.path.hash(&mut h);
-        c.contents.hash(&mut h);
+        // Lengths first, so no two different lists run together into the same bytes.
+        feed(&(c.path.len() as u64).to_le_bytes());
+        feed(c.path.as_bytes());
+        match &c.contents {
+            Some(t) => {
+                feed(&[1]);
+                feed(&(t.len() as u64).to_le_bytes());
+                feed(t.as_bytes());
+            }
+            None => feed(&[0]),
+        }
     }
-    format!("{:016x}", h.finish())
+    format!("{h:016x}")
 }
 
 /// Only changes that do something.
@@ -196,17 +210,29 @@ pub fn apply(root: &Root, changes: &[FileChange], surface: Surface, id: &str) ->
     }
     let manifest = Manifest { id: id.into(), surface: surface.key().into(), entries, confirmed: false, restored: false };
     save(root, &manifest)?;
-    // Generated stacks first, the target's include line last, so the target never points
-    // at a file that isn't there yet.
     let mut order: Vec<&FileChange> = changes.iter().collect();
-    order.sort_by_key(|c| !c.path.contains("/nyx-"));
-    for c in order {
-        match &c.contents {
-            Some(text) => fsx::write_atomic(&root.at(&c.path), text, 0o644)?,
-            None => fsx::remove_owned_or_foreign(&root.at(&c.path))?,
-        }
+    order.sort_by_key(|c| phase(&c.path, c.contents.is_some()));
+    let written = order.into_iter().try_for_each(|c| match &c.contents {
+        Some(text) => fsx::write_atomic(&root.at(&c.path), text, 0o644),
+        None => fsx::remove_owned_or_foreign(&root.at(&c.path)),
+    });
+    if let Err(e) = written {
+        // A change that stopped halfway is put back at once; the rollback timer isn't
+        // armed yet, so nothing else would.
+        let _ = restore(root, id);
+        return Err(e.into());
     }
     Ok(manifest)
+}
+
+/// The order files change in, so a target never includes a stack that isn't there: new
+/// and changed stacks first, then the targets, then the stacks that go away.
+fn phase(path: &str, kept: bool) -> u8 {
+    match (path.contains("/nyx-"), kept) {
+        (true, true) => 0,
+        (false, _) => 1,
+        (true, false) => 2,
+    }
 }
 
 fn save(root: &Root, m: &Manifest) -> Result<(), PamError> {
@@ -245,12 +271,12 @@ pub fn confirm(root: &Root, id: &str) -> Result<Manifest, PamError> {
     Ok(m)
 }
 
-/// Put every file back as it was, targets first so nothing points at a missing stack.
+/// Put every file back as it was, in the same safe order as [`apply`].
 pub fn restore(root: &Root, id: &str) -> Result<Manifest, PamError> {
     let mut m = load(root, id)?;
     let dir = root.backups().join(id);
     let mut entries = m.entries.clone();
-    entries.sort_by_key(|e| e.path.contains("/nyx-"));
+    entries.sort_by_key(|e| phase(&e.path, e.saved.is_some()));
     for e in &entries {
         if !allowed(&e.path) {
             return Err(PamError::NotAllowed(e.path.clone()));
@@ -329,6 +355,53 @@ mod tests {
         assert!(!root.at("/etc/pam.d/nyx-auth-sudo").exists());
         assert!(!root.at("/etc/pam.d/nyx-auth-sudo-session").exists());
         assert!(matches!(latest(&root), Err(PamError::NoSnapshot)));
+    }
+
+    #[test]
+    fn stacks_are_written_before_and_removed_after_their_targets() {
+        let mut paths = [
+            ("/etc/pam.d/nyx-auth-sudo-session", false),
+            ("/etc/pam.d/sudo", true),
+            ("/etc/pam.d/nyx-auth-sudo", true),
+            (POLKIT_DROPIN, false),
+        ];
+        paths.sort_by_key(|(p, kept)| phase(p, *kept));
+        let order: Vec<&str> = paths.iter().map(|(p, _)| *p).collect();
+        assert_eq!(order[0], "/etc/pam.d/nyx-auth-sudo");
+        assert_eq!(order[3], "/etc/pam.d/nyx-auth-sudo-session");
+
+        // Turning everything off: sudo stops including the stack before the stack goes.
+        let (_d, root) = setup();
+        let m = Modules::system(Some(Backend::Irlume));
+        let on = prepare(&root, &recommended(), Surface::Sudo, &inv(), &m).unwrap();
+        apply(&root, &effective(&root, &on), Surface::Sudo, "1").unwrap();
+        let off = prepare(&root, &PolicySet::default().to_toml(), Surface::Sudo, &inv(), &Modules::system(None)).unwrap();
+        apply(&root, &effective(&root, &off), Surface::Sudo, "2").unwrap();
+        assert_eq!(fs::read_to_string(root.at("/etc/pam.d/sudo")).unwrap(), SUDO);
+        assert!(!root.at("/etc/pam.d/nyx-auth-sudo").exists());
+    }
+
+    #[test]
+    fn a_change_that_fails_halfway_is_put_back() {
+        use std::os::unix::fs::PermissionsExt;
+        // SAFETY: geteuid has no preconditions.
+        if unsafe { libc::geteuid() } == 0 {
+            return; // root writes into a read-only directory anyway
+        }
+        let (_d, root) = setup();
+        let dropin_dir = root.at(POLKIT_DROPIN);
+        let dropin_dir = dropin_dir.parent().unwrap();
+        fs::create_dir_all(dropin_dir).unwrap();
+        fs::set_permissions(dropin_dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let changes = [
+            FileChange { path: "/etc/pam.d/nyx-auth-polkit-1".into(), contents: Some("#%PAM-1.0\n# Nyx Biometrics: x\n".into()) },
+            FileChange { path: POLKIT_DROPIN.into(), contents: Some(generate::POLKIT_DROPIN_TEXT.into()) },
+        ];
+        let result = apply(&root, &changes, Surface::Polkit, "7");
+        fs::set_permissions(dropin_dir, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(result.is_err());
+        assert!(!root.at("/etc/pam.d/nyx-auth-polkit-1").exists(), "the stack written first was taken back");
+        assert!(load(&root, "7").unwrap().restored);
     }
 
     #[test]
