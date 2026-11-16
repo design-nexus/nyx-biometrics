@@ -45,6 +45,22 @@ pub struct Context {
     /// The user's display session is local, on a seat, and active.
     pub local_display: Option<bool>,
     pub lid_closed: bool,
+    /// The person asked for their password instead (Nyx Prompt's "Use password").
+    pub password_first: bool,
+}
+
+/// Nyx Prompt's marker for "use my password this time": in the user's runtime folder,
+/// theirs, and fresh. Honoured for administrator prompts only, where the prompt asks.
+pub const PASSWORD_FIRST: &str = "nyx-auth/password-first";
+const PASSWORD_FIRST_FOR: Duration = Duration::from_secs(60);
+
+/// Whether `uid`'s marker is there: a regular file they own (not a link), under a minute old.
+pub fn password_first(runtime: &Path, uid: u32) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(m) = fs::symlink_metadata(runtime.join(uid.to_string()).join(PASSWORD_FIRST)) else { return false };
+    m.file_type().is_file()
+        && m.uid() == uid
+        && m.modified().ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age < PASSWORD_FIRST_FOR)
 }
 
 /// `Some(reason)` to skip.
@@ -77,6 +93,10 @@ pub fn decide(kind: Kind, ctx: &Context) -> Option<&'static str> {
     }
     if kind == Kind::BuiltIn && ctx.lid_closed {
         return Some("lid closed");
+    }
+    // Skipping only ever leaves the password, so it can't make signing in easier.
+    if ctx.password_first && ctx.service == "polkit-1" {
+        return Some("password asked for");
     }
     None
 }
@@ -160,6 +180,38 @@ mod tests {
             local_display: Some(true),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn password_first_skips_methods_in_administrator_prompts_only() {
+        let polkit = Context { service: "polkit-1".into(), password_first: true, ..local() };
+        assert_eq!(decide(Kind::BuiltIn, &polkit), Some("password asked for"));
+        assert_eq!(decide(Kind::Local, &polkit), Some("password asked for"));
+        let sudo = Context { password_first: true, ..local() };
+        assert_eq!(decide(Kind::BuiltIn, &sudo), None);
+    }
+
+    #[test]
+    fn password_first_marker_is_the_users_own_and_fresh() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = tempfile::tempdir().unwrap();
+        let uid = std::fs::metadata(dir.path()).unwrap().uid();
+        assert!(!password_first(dir.path(), uid));
+        let marker = dir.path().join(uid.to_string()).join(PASSWORD_FIRST);
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        std::fs::write(&marker, "").unwrap();
+        assert!(password_first(dir.path(), uid));
+        assert!(!password_first(dir.path(), uid + 1), "someone else's folder");
+        // A link isn't the marker.
+        std::fs::remove_file(&marker).unwrap();
+        std::os::unix::fs::symlink(dir.path(), &marker).unwrap();
+        assert!(!password_first(dir.path(), uid));
+        // An old one has expired.
+        std::fs::remove_file(&marker).unwrap();
+        std::fs::write(&marker, "").unwrap();
+        let old = std::time::SystemTime::now() - Duration::from_secs(120);
+        std::fs::File::options().write(true).open(&marker).unwrap().set_modified(old).unwrap();
+        assert!(!password_first(dir.path(), uid));
     }
 
     #[test]

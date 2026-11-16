@@ -90,7 +90,10 @@ mod tests {
         let home = Path::new("/home/u");
         let store = PathBuf::from("/nix/store/abc-nyx-passwords/bin");
         let listed = || vec![store.clone()];
-        assert_eq!(suite_program_in(&store.join(".nyx-passwordsd-wrapped"), home, true, listed()).as_deref(), Some("nyx-passwordsd"));
+        assert_eq!(
+            suite_program_in(&store.join(".nyx-passwordsd-wrapped"), home, true, listed()).as_deref(),
+            Some("nyx-passwordsd")
+        );
         assert!(suite_program_in(Path::new("/home/u/.local/bin/nyx-passwordsd"), home, true, listed()).is_none());
         assert!(suite_program_in(Path::new("/usr/bin/nyx-passwordsd"), home, true, listed()).is_none());
         assert!(suite_program_in(Path::new("/home/u/.local/bin/nyx-passwordsd"), home, false, listed()).is_some());

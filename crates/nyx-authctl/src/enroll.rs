@@ -16,11 +16,11 @@ const KEYD_FILES: [(&str, &str); 3] = [
         include_str!("../../nyx-auth-keyd/data/io.github.design_nexus.nyx.auth.unlock.policy"),
     ),
 ];
+use nyx_auth_hw::SystemRunner;
 use nyx_auth_hw::face::Backend;
 use nyx_auth_hw::fido2::{self, Keys};
 use nyx_auth_hw::report::Report;
 use nyx_auth_hw::u2f::{self, AuthFile, Names};
-use nyx_auth_hw::SystemRunner;
 
 const PKEXEC: &str = "/usr/bin/pkexec";
 const PAMU2FCFG: &str = "/usr/bin/pamu2fcfg";
@@ -128,9 +128,7 @@ pub fn keys_add(rest: &[&str]) -> ExitCode {
     if let Err(code) = need(PAMU2FCFG, "pam-u2f") {
         return code;
     }
-    if pin
-        && let Err(code) = ensure_pin()
-    {
+    if pin && let Err(code) = ensure_pin() {
         return code;
     }
     eprintln!("Touch your security key when it blinks{}.", if pin { " (it will ask for its PIN first)" } else { "" });

@@ -28,9 +28,21 @@ fn run() -> ExitCode {
         caller_session_remote: gate::session_remote(proc, &SystemRunner, caller),
         local_display: gate::local_display(&SystemRunner, &user),
         lid_closed: gate::lid_closed(proc),
+        password_first: uid_of(&user).is_some_and(|uid| gate::password_first(Path::new("/run/user"), uid)),
     };
     match gate::decide(kind, &ctx) {
         Some(_) => ExitCode::SUCCESS,
         None => ExitCode::FAILURE,
     }
+}
+
+/// The account's user ID, from the password database.
+fn uid_of(user: &str) -> Option<u32> {
+    let name = std::ffi::CString::new(user).ok()?;
+    let mut pw: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut buf = vec![0 as libc::c_char; 4096];
+    let mut out: *mut libc::passwd = std::ptr::null_mut();
+    // SAFETY: getpwnam_r writes only into pw and buf, whose sizes it's told.
+    let rc = unsafe { libc::getpwnam_r(name.as_ptr(), &mut pw, buf.as_mut_ptr(), buf.len(), &mut out) };
+    (rc == 0 && !out.is_null()).then_some(pw.pw_uid)
 }
