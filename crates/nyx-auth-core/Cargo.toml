@@ -15,4 +15,4 @@ serde.workspace = true
 toml.workspace = true
 thiserror.workspace = true
 zvariant = { version = "5", optional = true }
-nyx-peer = { git = "https://github.com/design-nexus/nyx-core.git", rev = "94e0c8aa133074c74adb31365e51f56168114f68" }
+nyx-peer = { git = "https://github.com/design-nexus/nyx-core.git", rev = "a258c315f056ac649586fdb55e98613056221411" }
