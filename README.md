@@ -1,6 +1,6 @@
 # Nyx Biometrics
 
-Local sign-in with your face, fingerprint or security key for Omarchy and the Nyx apps,
+Local sign-in with your face, fingerprint or security key for NyxOS, Omarchy and the Nyx apps,
 with your password always available as a fallback.
 
 - **Face**: Irlume on infrared (Windows Hello) cameras, Gaze on ordinary webcams.
@@ -13,6 +13,8 @@ with your password always available as a fallback.
 
 Everything runs on this computer. Nothing is sent to a cloud service, and no face images
 are kept.
+
+On NyxOS, turn it on in **Settings › Sign-in & Security**.
 
 > **Status: in development.** See [docs/ROADMAP.md](docs/ROADMAP.md) for what works today.
 > Nothing here changes your sign-in setup until you review and approve it.
