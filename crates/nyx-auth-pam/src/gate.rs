@@ -56,8 +56,13 @@ const PASSWORD_FIRST_FOR: Duration = Duration::from_secs(60);
 
 /// Whether `uid`'s marker is there: a regular file they own (not a link), under a minute old.
 pub fn password_first(runtime: &Path, uid: u32) -> bool {
+    fresh_password_marker(&runtime.join(uid.to_string()).join(PASSWORD_FIRST), uid)
+}
+
+/// Also used for markers in private account directories provisioned by NixOS.
+pub fn fresh_password_marker(path: &Path, uid: u32) -> bool {
     use std::os::unix::fs::MetadataExt;
-    let Ok(m) = fs::symlink_metadata(runtime.join(uid.to_string()).join(PASSWORD_FIRST)) else { return false };
+    let Ok(m) = fs::symlink_metadata(path) else { return false };
     m.file_type().is_file()
         && m.uid() == uid
         && m.modified().ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age < PASSWORD_FIRST_FOR)

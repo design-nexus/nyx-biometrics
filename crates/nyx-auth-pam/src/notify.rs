@@ -66,6 +66,11 @@ pub fn command(event: &str, method: &str, service: &str, user: &str, uid: u32, d
     {
         return None;
     }
+    let nixos_configuration = std::fs::canonicalize("/etc/nyx/auth-overlay/shell.qml").ok();
+    let (quickshell, configuration) = match nixos_configuration.as_ref().and_then(|path| path.to_str()) {
+        Some(path) => ("/etc/nyx/auth-overlay/quickshell", path),
+        None => (QUICKSHELL, SHELL_CONFIG),
+    };
     Some(
         [
             "/usr/bin/env",
@@ -74,10 +79,10 @@ pub fn command(event: &str, method: &str, service: &str, user: &str, uid: u32, d
             &format!("WAYLAND_DISPLAY={display}"),
             "LANG=C.UTF-8",
             "PATH=/usr/bin",
-            QUICKSHELL,
+            quickshell,
             "ipc",
             "-p",
-            SHELL_CONFIG,
+            configuration,
             "call",
             "nyx-auth",
             "notify",

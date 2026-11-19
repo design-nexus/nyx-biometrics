@@ -54,7 +54,9 @@ where we can't.
   `sudo` while the user is in view; remote sessions and a closed lid stay excluded. The
   Phase 4 overlay must show visibly whenever a scan runs, so it can't happen unnoticed. The camera is closed between attempts.
   Hands-free unlock is off by default and separate. A visible overlay shows whenever a
-  face check runs.
+  face check runs. NyxOS administrator prompts use Halo before handing off to the
+  password prompt. A retry marker lives in a private account directory that the
+  sandboxed PAM helper can read and only takes a conversation to password authentication.
 
 ### Fingerprint spoofing
 

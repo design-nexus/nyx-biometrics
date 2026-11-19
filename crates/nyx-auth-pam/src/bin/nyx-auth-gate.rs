@@ -21,14 +21,19 @@ fn run() -> ExitCode {
     // pam_exec's child: the parent is the program running PAM (sudo, the polkit helper, …).
     let caller = std::os::unix::process::parent_id();
     let user = std::env::var("PAM_USER").unwrap_or_default();
+    let service = std::env::var("PAM_SERVICE").unwrap_or_default();
+    let password_first = service == "polkit-1" && uid_of(&user).is_some_and(|uid| {
+        let managed = Path::new("/run/nyx-auth/password-first").join(&user).join("request");
+        gate::fresh_password_marker(&managed, uid) || gate::password_first(Path::new("/run/user"), uid)
+    });
     let ctx = Context {
-        service: std::env::var("PAM_SERVICE").unwrap_or_default(),
+        service,
         rhost: std::env::var("PAM_RHOST").unwrap_or_default(),
         ancestors: gate::ancestors(proc, caller),
         caller_session_remote: gate::session_remote(proc, &SystemRunner, caller),
         local_display: gate::local_display(&SystemRunner, &user),
         lid_closed: gate::lid_closed(proc),
-        password_first: uid_of(&user).is_some_and(|uid| gate::password_first(Path::new("/run/user"), uid)),
+        password_first,
     };
     match gate::decide(kind, &ctx) {
         Some(_) => ExitCode::SUCCESS,
