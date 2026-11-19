@@ -32,7 +32,7 @@ impl Paths {
         Self {
             sys: "/sys".into(),
             dev: "/dev".into(),
-            pam_modules: "/usr/lib/security".into(),
+            pam_modules: nyx_auth_core::system::path("/usr/lib/security"),
             authfile: u2f::AUTHFILE.into(),
             names_dir: u2f::NAMES_DIR.into(),
             omarchy_authfile: u2f::OMARCHY_AUTHFILE.into(),

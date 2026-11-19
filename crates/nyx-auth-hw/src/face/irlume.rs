@@ -83,7 +83,10 @@ pub fn probe(runner: &dyn Runner, user: &str) -> Probe {
 /// over the session bus; on a private bus (as in an agent's terminal) that would start a
 /// new gnome-keyring and ask to create a keyring. Without a bus the check is "unknown".
 fn machine(runner: &dyn Runner, user_env: &str, args: &[&str]) -> Result<Value, String> {
-    let mut full = vec!["-u", "DBUS_SESSION_BUS_ADDRESS", "-u", "XDG_RUNTIME_DIR", user_env, IRLUME];
+    // env executes this argument directly, so resolve the executable before passing it.
+    let irlume = nyx_auth_core::system::path(IRLUME);
+    let irlume = irlume.to_str().ok_or("Irlume executable path is not valid UTF-8")?;
+    let mut full = vec!["-u", "DBUS_SESSION_BUS_ADDRESS", "-u", "XDG_RUNTIME_DIR", user_env, irlume];
     full.extend_from_slice(args);
     let out = runner.run(ENV, &full, TIMEOUT).map_err(|e| e.to_string())?;
     let verb = args[0];
@@ -103,9 +106,13 @@ mod tests {
     use super::*;
     use crate::cmd::{FakeRunner, Output};
 
-    const STATUS: &str = "/usr/bin/env -u DBUS_SESSION_BUS_ADDRESS -u XDG_RUNTIME_DIR USER=ken /usr/bin/irlume status --json --contract 1 --user ken";
-    const DOCTOR: &str =
-        "/usr/bin/env -u DBUS_SESSION_BUS_ADDRESS -u XDG_RUNTIME_DIR USER=ken /usr/bin/irlume doctor --json --contract 1";
+    fn command(args: &str) -> String {
+        let executable = nyx_auth_core::system::path(IRLUME);
+        format!(
+            "/usr/bin/env -u DBUS_SESSION_BUS_ADDRESS -u XDG_RUNTIME_DIR USER=ken {} {args}",
+            executable.display()
+        )
+    }
 
     fn status(daemon: &str, profiles: u32, ir: bool) -> String {
         format!(
@@ -133,8 +140,8 @@ mod tests {
     fn ready_with_liveness() {
         let r = FakeRunner::new()
             .installed(IRLUME)
-            .reply(STATUS, Output::ok(&status("running", 1, true)))
-            .reply(DOCTOR, Output::ok(&doctor(ALL_PASS)));
+            .reply(&command("status --json --contract 1 --user ken"), Output::ok(&status("running", 1, true)))
+            .reply(&command("doctor --json --contract 1"), Output::ok(&doctor(ALL_PASS)));
         let p = probe(&r, "ken");
         assert!(p.installed);
         assert_eq!(p.daemon, Daemon::Running);
@@ -149,21 +156,21 @@ mod tests {
         states[3] = ("ir-calibration", "warn");
         let r = FakeRunner::new()
             .installed(IRLUME)
-            .reply(STATUS, Output::ok(&status("running", 1, true)))
-            .reply(DOCTOR, Output::ok(&doctor(&states)));
+            .reply(&command("status --json --contract 1 --user ken"), Output::ok(&status("running", 1, true)))
+            .reply(&command("doctor --json --contract 1"), Output::ok(&doctor(&states)));
         let p = probe(&r, "ken");
         assert!(!p.liveness);
         assert!(p.notes.iter().any(|n| n.contains("ir-calibration")));
 
         // A doctor that can't run is unknown, which counts as no.
-        let r = FakeRunner::new().installed(IRLUME).reply(STATUS, Output::ok(&status("running", 1, true)));
+        let r = FakeRunner::new().installed(IRLUME).reply(&command("status --json --contract 1 --user ken"), Output::ok(&status("running", 1, true)));
         assert!(!probe(&r, "ken").liveness);
     }
 
     #[test]
     fn unknown_enrollment_is_not_zero() {
         let doc = r#"{"contract_version":1,"engine_version":"0.15.0","command":"status","ok":true,"data":{"daemon":"unreachable","enrollment":{"known":false},"camera":{"known":false,"rgb":true,"ir":true}}}"#;
-        let r = FakeRunner::new().installed(IRLUME).reply(STATUS, Output::ok(doc)).reply(DOCTOR, Output::ok(&doctor(ALL_PASS)));
+        let r = FakeRunner::new().installed(IRLUME).reply(&command("status --json --contract 1 --user ken"), Output::ok(doc)).reply(&command("doctor --json --contract 1"), Output::ok(&doctor(ALL_PASS)));
         let p = probe(&r, "ken");
         assert_eq!(p.daemon, Daemon::Unreachable);
         assert_eq!(p.enrolled, None);
@@ -177,21 +184,21 @@ mod tests {
         let p = probe(
             &FakeRunner::new()
                 .installed(IRLUME)
-                .reply(STATUS, Output { status: Some(1), stdout: refused.into(), stderr: String::new() }),
+                .reply(&command("status --json --contract 1 --user ken"), Output { status: Some(1), stdout: refused.into(), stderr: String::new() }),
             "ken",
         );
         assert!(p.installed);
         assert_eq!(p.daemon, Daemon::Unknown);
         assert!(p.notes[0].contains("daemon-unavailable"));
         let newer = r#"{"contract_version":2,"ok":true,"data":{}}"#;
-        let p = probe(&FakeRunner::new().installed(IRLUME).reply(STATUS, Output::ok(newer)), "ken");
+        let p = probe(&FakeRunner::new().installed(IRLUME).reply(&command("status --json --contract 1 --user ken"), Output::ok(newer)), "ken");
         assert!(p.notes[0].contains("contract 1"));
     }
 
     #[test]
     fn disabled_face_counts_as_not_enrolled() {
         let doc = status("running", 2, true).replace(r#""face_disabled":false"#, r#""face_disabled":true"#);
-        let r = FakeRunner::new().installed(IRLUME).reply(STATUS, Output::ok(&doc)).reply(DOCTOR, Output::ok(&doctor(ALL_PASS)));
+        let r = FakeRunner::new().installed(IRLUME).reply(&command("status --json --contract 1 --user ken"), Output::ok(&doc)).reply(&command("doctor --json --contract 1"), Output::ok(&doctor(ALL_PASS)));
         assert_eq!(probe(&r, "ken").enrolled, Some(0));
     }
 }
